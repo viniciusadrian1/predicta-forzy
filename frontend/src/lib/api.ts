@@ -5,10 +5,13 @@ import type {
   Asset,
   AuthToken,
   BaselinePrediction,
+  ChatMessage,
+  ChatSource,
   HierarchyPlant,
   LatestSnapshot,
   NameplateExtraction,
   Plant,
+  RagStatus,
   RpaResult,
   RulEstimate,
   TelemetrySeries,
@@ -225,4 +228,76 @@ export async function sendMlFeedback(
     body: JSON.stringify(input),
   });
   return parse<{ recorded: boolean; message: string }>(response);
+}
+
+// --- RAG / Chat de troubleshooting ---
+export async function getRagStatus(): Promise<RagStatus> {
+  return parse<RagStatus>(await fetch(apiUrl("/rag/status"), { cache: "no-store" }));
+}
+
+export interface ChatStreamHandlers {
+  onSources?: (sources: ChatSource[], mode: string, usedAssetContext: boolean) => void;
+  onToken?: (text: string) => void;
+  onDone?: (answer: string, mode: string) => void;
+}
+
+export interface ChatStreamInput {
+  message: string;
+  assetTag?: string | null;
+  history?: ChatMessage[];
+}
+
+/**
+ * Consome o endpoint SSE de chat (POST /rag/chat/stream), repassando os
+ * eventos `sources`, `token` e `done` para os handlers fornecidos.
+ */
+export async function streamChat(
+  input: ChatStreamInput,
+  handlers: ChatStreamHandlers,
+): Promise<void> {
+  const response = await fetch(apiUrl("/rag/chat/stream"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      message: input.message,
+      asset_tag: input.assetTag ?? null,
+      history: input.history ?? [],
+    }),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error("Falha ao conectar com o assistente");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      const payload = JSON.parse(data) as Record<string, unknown>;
+      if (event === "sources") {
+        handlers.onSources?.(
+          (payload.sources as ChatSource[]) ?? [],
+          String(payload.mode ?? "offline"),
+          Boolean(payload.used_asset_context),
+        );
+      } else if (event === "token") {
+        handlers.onToken?.(String(payload.text ?? ""));
+      } else if (event === "done") {
+        handlers.onDone?.(String(payload.answer ?? ""), String(payload.mode ?? "offline"));
+      }
+    }
+  }
 }

@@ -21,7 +21,7 @@ export function Header() {
           className="flex items-center gap-2 font-semibold text-slate-100"
         >
           <Activity className="h-5 w-5 text-cyan-400" />
-          Forzy Digital Twin
+          Predicta
         </Link>
         <nav className="flex items-center gap-4 text-sm">
           <Link href="/dashboard" className="text-slate-400 hover:text-slate-200">
@@ -29,6 +29,9 @@ export function Header() {
           </Link>
           <Link href="/alerts" className="text-slate-400 hover:text-slate-200">
             Alertas
+          </Link>
+          <Link href="/chat" className="text-slate-400 hover:text-slate-200">
+            Assistente
           </Link>
         </nav>
         <div className="text-sm">

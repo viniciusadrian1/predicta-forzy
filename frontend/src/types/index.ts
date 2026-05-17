@@ -184,3 +184,33 @@ export interface Alert {
   ack_at: string | null;
   ack_comment: string | null;
 }
+
+// --- RAG / Chat de troubleshooting ---
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatSource {
+  document_id: string;
+  document_title: string;
+  snippet: string;
+  score: number;
+}
+
+export interface ChatResponse {
+  answer: string;
+  mode: "anthropic" | "offline";
+  sources: ChatSource[];
+  asset_tag: string | null;
+  used_asset_context: boolean;
+}
+
+export interface RagStatus {
+  ready: boolean;
+  indexed_chunks: number;
+  documents: number;
+  vector_backend: string;
+  llm_mode: "anthropic" | "offline";
+  embedding_dim: number;
+}

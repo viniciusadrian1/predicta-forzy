@@ -44,7 +44,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-lg">Forzy Digital Twin</CardTitle>
+          <CardTitle className="text-lg">Predicta</CardTitle>
           <p className="text-sm text-slate-400">
             Acesse o painel de monitoramento de ativos
           </p>

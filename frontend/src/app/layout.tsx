@@ -8,7 +8,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Forzy Digital Twin",
+  title: "Predicta",
   description: "Monitoramento e manutencao preditiva de motores industriais",
 };
 

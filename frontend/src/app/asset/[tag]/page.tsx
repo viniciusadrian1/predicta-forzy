@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { AssetHealth } from "@/components/AssetHealth";
+import { ChatWidget } from "@/components/ChatWidget";
 import { Header } from "@/components/Header";
 import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -117,6 +118,8 @@ export default function AssetPage({ params }: AssetPageProps) {
                 </dl>
               </CardContent>
             </Card>
+
+            <ChatWidget assetTag={asset.tag} />
           </>
         )}
       </main>
