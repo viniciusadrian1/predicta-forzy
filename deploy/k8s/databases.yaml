@@ -1,0 +1,285 @@
+# Servicos de persistencia e edge do Predicta.
+# ---------------------------------------------------------------- PostgreSQL
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: predicta
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: predicta
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: predicta-config, key: POSTGRES_USER }
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: { name: predicta-config, key: POSTGRES_DB }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: predicta-secrets, key: POSTGRES_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "forzy", "-d", "forzy_catalog"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: predicta
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+# --------------------------------------------------------------- TimescaleDB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: timescale-data
+  namespace: predicta
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timescaledb
+  namespace: predicta
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb:latest-pg16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: predicta-config, key: TIMESCALE_USER }
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: { name: predicta-config, key: TIMESCALE_DB }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: predicta-secrets, key: TIMESCALE_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "forzy", "-d", "forzy_timeseries"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: timescale-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  namespace: predicta
+spec:
+  selector:
+    app: timescaledb
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+# --------------------------------------------------------------------- Redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: predicta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests: { cpu: "100m", memory: 64Mi }
+            limits: { cpu: "500m", memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: predicta
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+# ------------------------------------------------------------------ ChromaDB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chroma-data
+  namespace: predicta
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromadb
+  namespace: predicta
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chromadb
+  template:
+    metadata:
+      labels:
+        app: chromadb
+    spec:
+      containers:
+        - name: chromadb
+          image: chromadb/chroma:0.5.20
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /chroma/chroma
+          resources:
+            requests: { cpu: "250m", memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: chroma-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb
+  namespace: predicta
+spec:
+  selector:
+    app: chromadb
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+# ------------------------------------------------------- Simulador OPC-UA
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opcua-simulator
+  namespace: predicta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opcua-simulator
+  template:
+    metadata:
+      labels:
+        app: opcua-simulator
+    spec:
+      containers:
+        - name: opcua-simulator
+          image: predicta/opcua-simulator:0.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4840
+          env:
+            - name: OPCUA_HOST
+              value: "0.0.0.0"
+            - name: OPCUA_PORT
+              value: "4840"
+          resources:
+            requests: { cpu: "100m", memory: 128Mi }
+            limits: { cpu: "500m", memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opcua-simulator
+  namespace: predicta
+spec:
+  selector:
+    app: opcua-simulator
+  ports:
+    - port: 4840
+      targetPort: 4840

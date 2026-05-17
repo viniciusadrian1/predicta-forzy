@@ -6,12 +6,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Extras opcionais de pip (ex.: PIP_EXTRAS="[rag]" habilita o backend ChromaDB).
+ARG PIP_EXTRAS=""
+
 COPY pyproject.toml ./
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".${PIP_EXTRAS}"
 
 EXPOSE 8000
 

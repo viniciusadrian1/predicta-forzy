@@ -1,0 +1,150 @@
+# Predicta - stack de producao.
+# Subir: docker compose -f docker-compose.prod.yml up -d --build
+#
+# Diferencas em relacao ao docker-compose.yml de desenvolvimento:
+#  - frontend compilado (next build + next start) via Dockerfile.prod;
+#  - backend com o extra [rag] e RAG_VECTOR_BACKEND=chroma (usa o ChromaDB);
+#  - limites de CPU/memoria por servico;
+#  - senhas obrigatorias via .env (sem default inseguro).
+name: predicta-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: predicta-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-forzy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-forzy_catalog}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+    restart: always
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: predicta-timescaledb
+    environment:
+      POSTGRES_USER: ${TIMESCALE_USER:-forzy}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:?defina TIMESCALE_PASSWORD no .env}
+      POSTGRES_DB: ${TIMESCALE_DB:-forzy_timeseries}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: predicta-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+    restart: always
+
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    container_name: predicta-chromadb
+    volumes:
+      - chroma_data:/chroma/chroma
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+    restart: always
+
+  opcua-simulator:
+    build:
+      context: ./edge/opcua_simulator
+    container_name: predicta-opcua-simulator
+    environment:
+      OPCUA_HOST: 0.0.0.0
+      OPCUA_PORT: "4840"
+      OPCUA_NAMESPACE_URI: ${OPCUA_NAMESPACE_URI:-http://forzy.promon/opcua/}
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        PIP_EXTRAS: "[rag]"
+    container_name: predicta-backend
+    env_file: .env
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+      POSTGRES_HOST: postgres
+      TIMESCALE_HOST: timescaledb
+      REDIS_HOST: redis
+      CHROMA_HOST: chromadb
+      OPCUA_ENDPOINT: opc.tcp://opcua-simulator:4840/forzy/server/
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      FEATURE_RAG: "true"
+      RBAC_ENABLED: "true"
+      RAG_VECTOR_BACKEND: "chroma"
+      RAG_DOCUMENTS_DIR: /rag/documents
+    volumes:
+      - ./rag:/rag:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      opcua-simulator:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 1G }
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    container_name: predicta-frontend
+    ports:
+      - "80:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+    restart: always
+
+volumes:
+  postgres_data:
+  timescale_data:
+  chroma_data:

@@ -1,0 +1,25 @@
+# Build de producao do frontend Predicta (Next.js 14).
+# Compila a aplicacao (next build) e a serve com next start.
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Evita o download dos navegadores do Playwright na imagem.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# As variaveis NEXT_PUBLIC_* sao embutidas em tempo de build.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_V1_PREFIX=/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_API_V1_PREFIX=$NEXT_PUBLIC_API_V1_PREFIX
+
+COPY package.json ./
+RUN npm install
+
+COPY . .
+RUN npm run build
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

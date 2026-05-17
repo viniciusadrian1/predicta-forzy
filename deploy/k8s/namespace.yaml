@@ -1,0 +1,50 @@
+# Namespace, configuracao e segredos do Predicta.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: predicta
+  labels:
+    app.kubernetes.io/part-of: predicta
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predicta-config
+  namespace: predicta
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "forzy"
+  POSTGRES_DB: "forzy_catalog"
+  TIMESCALE_HOST: "timescaledb"
+  TIMESCALE_PORT: "5432"
+  TIMESCALE_USER: "forzy"
+  TIMESCALE_DB: "forzy_timeseries"
+  REDIS_HOST: "redis"
+  CHROMA_HOST: "chromadb"
+  CHROMA_PORT: "8000"
+  OPCUA_ENDPOINT: "opc.tcp://opcua-simulator:4840/forzy/server/"
+  CORS_ORIGINS: "http://predicta.local"
+  FEATURE_RAG: "true"
+  RBAC_ENABLED: "true"
+  RAG_VECTOR_BACKEND: "chroma"
+  RAG_DOCUMENTS_DIR: "/rag/documents"
+  LLM_PROVIDER: "anthropic"
+  LLM_MODEL: "claude-3-5-haiku-20241022"
+---
+# ATENCAO: valores de exemplo. Em producao, gere os segredos com um cofre
+# (Sealed Secrets, External Secrets Operator ou Vault) - nunca versione
+# segredos reais. Gere o JWT com: openssl rand -hex 32
+apiVersion: v1
+kind: Secret
+metadata:
+  name: predicta-secrets
+  namespace: predicta
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "trocar-em-producao"
+  TIMESCALE_PASSWORD: "trocar-em-producao"
+  JWT_SECRET_KEY: "trocar-por-openssl-rand-hex-32-caracteres"
+  ANTHROPIC_API_KEY: ""

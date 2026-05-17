@@ -1,0 +1,82 @@
+# Backend Predicta (API / BFF) + Job de migracao do banco.
+# ----------------------------------------------- Job: migracoes + seed
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: predicta-migrate
+  namespace: predicta
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: predicta-migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: predicta/backend:0.4.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed"]
+          envFrom:
+            - configMapRef:
+                name: predicta-config
+            - secretRef:
+                name: predicta-secrets
+---
+# ------------------------------------------------------ Deployment do backend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: predicta
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: predicta/backend:0.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: predicta-config
+            - secretRef:
+                name: predicta-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "250m", memory: 512Mi }
+            limits: { cpu: "1500m", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: predicta
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
