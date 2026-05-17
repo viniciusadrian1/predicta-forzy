@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.core.config import get_settings
 from app.infra.db.base import CatalogBase
+from app.modules.alerts import models as alerts_models  # noqa: F401
 from app.modules.assets import models as assets_models  # noqa: F401
 from app.modules.governance import models as governance_models  # noqa: F401
 

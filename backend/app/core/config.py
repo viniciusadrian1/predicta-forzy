@@ -66,7 +66,8 @@ class Settings(BaseSettings):
     feature_assets: bool = True
     feature_telemetry: bool = True
     feature_vision: bool = True
-    feature_ml: bool = False
+    feature_ml: bool = True
+    feature_alerts: bool = True
     feature_rag: bool = False
     feature_automation: bool = True
     feature_governance: bool = True

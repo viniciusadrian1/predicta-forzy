@@ -20,11 +20,14 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.infra.db.base import timeseries_engine
 from app.infra.db.timescale import init_timeseries_schema
+from app.modules.alerts.evaluator import alerts_evaluator
+from app.modules.alerts.router import router as alerts_router
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
 from app.modules.automation.router import router as automation_router
 from app.modules.governance.middleware import AuditMiddleware
 from app.modules.governance.router import router as governance_router
+from app.modules.ml.router import router as ml_router
 from app.modules.telemetry.ingestion import TelemetryIngestionService
 from app.modules.telemetry.router import router as telemetry_router
 from app.modules.vision.router import router as vision_router
@@ -34,7 +37,7 @@ settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger("forzy.main")
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.3.0"
 
 
 @asynccontextmanager
@@ -52,11 +55,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if settings.feature_telemetry:
         ingestion = TelemetryIngestionService(settings)
         ingestion.start()
+    if settings.feature_alerts:
+        alerts_evaluator.start()
 
     yield
 
     if ingestion is not None:
         await ingestion.stop()
+    if settings.feature_alerts:
+        await alerts_evaluator.stop()
 
 
 def create_app() -> FastAPI:
@@ -94,6 +101,10 @@ def create_app() -> FastAPI:
         app.include_router(vision_router, prefix=prefix)
     if settings.feature_governance:
         app.include_router(governance_router, prefix=prefix)
+    if settings.feature_ml:
+        app.include_router(ml_router, prefix=prefix)
+    if settings.feature_alerts:
+        app.include_router(alerts_router, prefix=prefix)
 
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
