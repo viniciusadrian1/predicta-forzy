@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "forzy-backend"
 version = "0.1.0"
-description = "Forzy Digital Twin - API / BFF"
+description = "Predicta - API / BFF"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -24,16 +24,18 @@ dependencies = [
     "reportlab>=4.2",
     "scikit-learn>=1.5",
     "pandas>=2.2",
+    "httpx>=0.27",
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
 ocr = ["paddleocr>=2.7"]
+rag = ["chromadb>=0.5"]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
     "pytest-mock>=3.14",
-    "httpx>=0.27",
     "aiosqlite>=0.20",
     "ruff>=0.8",
     "black>=24.10",

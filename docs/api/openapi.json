@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Forzy Digital Twin",
+    "title": "Predicta",
     "description": "Plataforma de Digital Twin para monitoramento e manutencao preditiva de motores eletricos industriais.",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "paths": {
     "/api/v1/auth/login": {
@@ -12,7 +12,7 @@
           "auth"
         ],
         "summary": "Login",
-        "description": "Autentica um usuario e devolve um token JWT de acesso.",
+        "description": "Autentica um usuario e devolve um token JWT de acesso.\n\nA verificacao usa a tabela de usuarios; se a conta nao existir nela,\nrecai sobre os usuarios de demonstracao em memoria.",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -81,6 +81,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List Users",
+        "description": "Lista as contas de usuario cadastradas (requer papel admin).",
+        "operationId": "list_users_api_v1_users_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserAccount"
+                  },
+                  "title": "Response List Users Api V1 Users Get"
                 }
               }
             }
@@ -208,6 +262,24 @@
         ],
         "summary": "Create Asset",
         "operationId": "create_asset_api_v1_assets_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -890,15 +962,33 @@
         "summary": "Extract From Image",
         "description": "Extrai os dados da placa de identificacao de um ativo a partir de uma imagem.",
         "operationId": "extract_from_image_api_v1_assets_extract_from_image_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_extract_from_image_api_v1_assets_extract_from_image_post"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -930,7 +1020,7 @@
           "governance"
         ],
         "summary": "List Audit",
-        "description": "Lista os registros de auditoria mais recentes.",
+        "description": "Lista os registros de auditoria mais recentes (requer papel admin).",
         "operationId": "list_audit_api_v1_audit_get",
         "parameters": [
           {
@@ -943,6 +1033,22 @@
               "minimum": 1,
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -967,6 +1073,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/governance/data-lineage": {
+      "get": {
+        "tags": [
+          "governance"
+        ],
+        "summary": "Data Lineage",
+        "description": "Catalogo de dados classificado (data lineage) - requer papel engineer.",
+        "operationId": "data_lineage_api_v1_governance_data_lineage_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataLineageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/governance/access-policy": {
+      "get": {
+        "tags": [
+          "governance"
+        ],
+        "summary": "Access Policy",
+        "description": "Matriz de controle de acesso baseada em papeis (RBAC).",
+        "operationId": "access_policy_api_v1_governance_access_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPolicyOut"
                 }
               }
             }
@@ -1004,6 +1182,24 @@
         "summary": "Ml Train",
         "description": "Forca o retreino dos modelos a partir da telemetria recente.",
         "operationId": "ml_train_api_v1_ml_train_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1011,6 +1207,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MlStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1367,6 +1573,160 @@
         }
       }
     },
+    "/api/v1/rag/status": {
+      "get": {
+        "tags": [
+          "rag"
+        ],
+        "summary": "Rag Status",
+        "description": "Estado do indice de RAG e do provedor de LLM.",
+        "operationId": "rag_status_api_v1_rag_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rag/ingest": {
+      "post": {
+        "tags": [
+          "rag"
+        ],
+        "summary": "Rag Ingest",
+        "description": "Reindexa a base de conhecimento (requer papel engineer ou superior).",
+        "operationId": "rag_ingest_api_v1_rag_ingest_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rag/chat": {
+      "post": {
+        "tags": [
+          "rag"
+        ],
+        "summary": "Rag Chat",
+        "description": "Responde uma pergunta de troubleshooting (modo nao-streaming).",
+        "operationId": "rag_chat_api_v1_rag_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rag/chat/stream": {
+      "post": {
+        "tags": [
+          "rag"
+        ],
+        "summary": "Rag Chat Stream",
+        "description": "Responde via SSE, emitindo os eventos ``sources``, ``token`` e ``done``.",
+        "operationId": "rag_chat_stream_api_v1_rag_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "summary": "Metrics",
@@ -1408,6 +1768,68 @@
   },
   "components": {
     "schemas": {
+      "AccessPolicyOut": {
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "rbac_enabled": {
+            "type": "boolean",
+            "title": "Rbac Enabled"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AccessRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "roles",
+          "rbac_enabled",
+          "rules"
+        ],
+        "title": "AccessPolicyOut",
+        "description": "Politica de controle de acesso baseada em papeis (matriz RBAC)."
+      },
+      "AccessRule": {
+        "properties": {
+          "resource": {
+            "type": "string",
+            "title": "Resource"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Methods"
+          },
+          "min_role": {
+            "type": "string",
+            "title": "Min Role"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource",
+          "methods",
+          "min_role",
+          "description"
+        ],
+        "title": "AccessRule",
+        "description": "Regra da matriz RBAC: papel minimo exigido para um recurso."
+      },
       "AlertAck": {
         "properties": {
           "comment": {
@@ -2673,6 +3095,179 @@
         ],
         "title": "Body_register_from_image_api_v1_automation_register_from_image_post"
       },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage",
+        "description": "Mensagem de uma conversa (historico enviado pelo cliente)."
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "description": "Requisicao de chat: pergunta + contexto opcional do ativo."
+      },
+      "ChatResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "offline"
+            ],
+            "title": "Mode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/RagSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "used_asset_context": {
+            "type": "boolean",
+            "title": "Used Asset Context",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "mode",
+          "sources"
+        ],
+        "title": "ChatResponse",
+        "description": "Resposta do assistente, com as fontes citadas."
+      },
+      "DataAssetEntry": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "classification": {
+            "type": "string",
+            "title": "Classification"
+          },
+          "storage": {
+            "type": "string",
+            "title": "Storage"
+          },
+          "retention": {
+            "type": "string",
+            "title": "Retention"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset",
+          "origin",
+          "classification",
+          "storage",
+          "retention",
+          "notes"
+        ],
+        "title": "DataAssetEntry",
+        "description": "Item do inventario de dados (data lineage)."
+      },
+      "DataLineageOut": {
+        "properties": {
+          "document": {
+            "type": "string",
+            "title": "Document"
+          },
+          "classification_levels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Classification Levels"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/DataAssetEntry"
+            },
+            "type": "array",
+            "title": "Datasets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "classification_levels",
+          "datasets"
+        ],
+        "title": "DataLineageOut",
+        "description": "Catalogo de dados classificado, exposto pela API de governanca."
+      },
       "FeedbackRequest": {
         "properties": {
           "asset_tag": {
@@ -2877,6 +3472,35 @@
           "areas"
         ],
         "title": "HierarchyPlant"
+      },
+      "IngestResult": {
+        "properties": {
+          "ingested": {
+            "type": "boolean",
+            "title": "Ingested"
+          },
+          "documents": {
+            "type": "integer",
+            "title": "Documents"
+          },
+          "chunks": {
+            "type": "integer",
+            "title": "Chunks"
+          },
+          "vector_backend": {
+            "type": "string",
+            "title": "Vector Backend"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingested",
+          "documents",
+          "chunks",
+          "vector_backend"
+        ],
+        "title": "IngestResult",
+        "description": "Resultado de uma (re)ingestao da base de conhecimento."
       },
       "LatestOut": {
         "properties": {
@@ -3184,6 +3808,78 @@
         "type": "object",
         "title": "PredictRequest"
       },
+      "RagSource": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "document_title": {
+            "type": "string",
+            "title": "Document Title"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "document_title",
+          "snippet",
+          "score"
+        ],
+        "title": "RagSource",
+        "description": "Trecho da base de conhecimento usado para fundamentar a resposta."
+      },
+      "RagStatus": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "indexed_chunks": {
+            "type": "integer",
+            "title": "Indexed Chunks",
+            "default": 0
+          },
+          "documents": {
+            "type": "integer",
+            "title": "Documents",
+            "default": 0
+          },
+          "vector_backend": {
+            "type": "string",
+            "title": "Vector Backend",
+            "default": "memory"
+          },
+          "llm_mode": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "offline"
+            ],
+            "title": "Llm Mode",
+            "default": "offline"
+          },
+          "embedding_dim": {
+            "type": "integer",
+            "title": "Embedding Dim",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "RagStatus",
+        "description": "Estado do indice de RAG e do provedor de LLM."
+      },
       "RpaRegisterResult": {
         "properties": {
           "ocr_engine": {
@@ -3438,6 +4134,54 @@
           "role"
         ],
         "title": "TokenOut"
+      },
+      "UserAccount": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "role",
+          "full_name",
+          "is_active",
+          "created_at"
+        ],
+        "title": "UserAccount",
+        "description": "Conta de usuario exposta pela API de governanca (sem o hash da senha)."
       },
       "UserOut": {
         "properties": {

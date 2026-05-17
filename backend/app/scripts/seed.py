@@ -1,4 +1,4 @@
-"""Seed inicial do catalogo: planta, area e o motor de referencia MTR-001.
+"""Seed inicial do catalogo: planta, area, motor MTR-001 e usuarios.
 
 Idempotente - pode ser executado multiplas vezes com seguranca:
 
@@ -13,10 +13,21 @@ import logging
 from sqlalchemy import select
 
 from app.core.logging import configure_logging
+from app.core.security import hash_password
 from app.infra.db.base import catalog_session_factory
 from app.modules.assets.models import Area, Asset, Plant
+from app.modules.auth.models import User
 
 logger = logging.getLogger("forzy.seed")
+
+# Usuarios de demonstracao (usuario, senha, papel, nome completo).
+# As senhas sao protegidas por hashing argon2 no momento do seed.
+_SEED_USERS: tuple[tuple[str, str, str, str], ...] = (
+    ("admin", "admin123", "admin", "Administrador do Sistema"),
+    ("engenheiro", "eng123", "engineer", "Engenheiro de Manutencao"),
+    ("operador", "operador123", "operator", "Operador de Planta"),
+    ("viewer", "viewer123", "viewer", "Visualizador"),
+)
 
 
 async def seed() -> None:
@@ -72,6 +83,21 @@ async def seed() -> None:
             )
             session.add(asset)
             logger.info("Ativo criado: %s", asset.tag)
+
+        for username, password, role, full_name in _SEED_USERS:
+            user = (
+                await session.execute(select(User).where(User.username == username))
+            ).scalar_one_or_none()
+            if user is None:
+                session.add(
+                    User(
+                        username=username,
+                        password_hash=hash_password(password),
+                        role=role,
+                        full_name=full_name,
+                    )
+                )
+                logger.info("Usuario criado: %s (papel: %s)", username, role)
 
         await session.commit()
     logger.info("Seed concluido com sucesso.")

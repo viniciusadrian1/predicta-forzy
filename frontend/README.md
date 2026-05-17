@@ -1,4 +1,4 @@
-# Frontend — Forzy Digital Twin
+# Frontend — Predicta
 
 Aplicação web em **Next.js 14** (App Router, TypeScript estrito).
 

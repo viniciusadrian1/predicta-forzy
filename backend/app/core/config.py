@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- Geral ---
-    project_name: str = "Forzy Digital Twin"
+    project_name: str = "Predicta"
     environment: str = "development"
     log_level: str = "INFO"
     api_v1_prefix: str = "/api/v1"
@@ -56,10 +56,22 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
-    # --- LLM ---
+    # --- LLM (chat de troubleshooting com RAG) ---
     llm_provider: str = "anthropic"
+    llm_model: str = "claude-3-5-haiku-20241022"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+
+    # --- RAG (recuperacao aumentada para o chat) ---
+    rag_vector_backend: str = "memory"  # "memory" | "chroma"
+    rag_documents_dir: str = "/rag/documents"
+    rag_chunk_size: int = 800
+    rag_chunk_overlap: int = 150
+    rag_top_k: int = 4
+    rag_embedding_dim: int = 384
+
+    # --- RBAC (controle de acesso baseado em papeis) ---
+    rbac_enabled: bool = True
 
     # --- Feature flags (modularidade) ---
     feature_auth: bool = True
@@ -68,7 +80,7 @@ class Settings(BaseSettings):
     feature_vision: bool = True
     feature_ml: bool = True
     feature_alerts: bool = True
-    feature_rag: bool = False
+    feature_rag: bool = True
     feature_automation: bool = True
     feature_governance: bool = True
 

@@ -1,6 +1,6 @@
 # Sprint 3 — Inteligência operacional e apoio à decisão
 
-> Relatório executivo · Forzy Digital Twin · `v0.3.0-sprint3`
+> Relatório executivo · Predicta · `v0.3.0-sprint3`
 
 ## 1. Objetivo
 

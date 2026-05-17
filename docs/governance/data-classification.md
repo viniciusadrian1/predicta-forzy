@@ -1,4 +1,4 @@
-# Classificação de Dados — Forzy Digital Twin
+# Classificação de Dados — Predicta
 
 Documento de governança da Sprint 1. Classifica cada tipo de dado tratado pela
 plataforma, orientando políticas de acesso, retenção e conformidade (LGPD).

@@ -1,4 +1,4 @@
-# Backend — Forzy Digital Twin
+# Backend — Predicta
 
 API / BFF em **FastAPI** (Python 3.11, assíncrono).
 

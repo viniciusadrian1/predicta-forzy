@@ -1,4 +1,4 @@
-# Forzy Digital Twin - stack de desenvolvimento completa.
+# Predicta - stack de desenvolvimento completa.
 # Subir: docker compose up -d --build
 name: forzy-digital-twin
 
@@ -118,6 +118,13 @@ services:
       FEATURE_AUTOMATION: "true"
       FEATURE_ML: "true"
       FEATURE_ALERTS: "true"
+      FEATURE_RAG: "true"
+      RBAC_ENABLED: "true"
+      RAG_VECTOR_BACKEND: "memory"
+      RAG_DOCUMENTS_DIR: /rag/documents
+    volumes:
+      # Corpus adicional de RAG (PDFs/manuais) ingerido alem do corpus empacotado.
+      - ./rag:/rag:ro
     ports:
       - "8000:8000"
     depends_on:

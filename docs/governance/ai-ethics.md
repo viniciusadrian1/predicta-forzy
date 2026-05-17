@@ -1,4 +1,4 @@
-# Governança de IA — Forzy Digital Twin
+# Governança de IA — Predicta
 
 Documento de governança dos modelos de Machine Learning (Sprint 3).
 

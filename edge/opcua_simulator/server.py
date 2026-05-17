@@ -44,7 +44,7 @@ async def build_server() -> tuple[Server, dict]:
     await server.init()
     endpoint = f"opc.tcp://{OPCUA_HOST}:{OPCUA_PORT}/forzy/server/"
     server.set_endpoint(endpoint)
-    server.set_server_name("Forzy Digital Twin - OPC-UA Simulator")
+    server.set_server_name("Predicta - OPC-UA Simulator")
     # Simulador local: aceita conexoes anonimas sem seguranca.
     server.set_security_policy([ua.SecurityPolicyType.NoSecurity])
 

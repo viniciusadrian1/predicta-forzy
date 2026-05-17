@@ -1,4 +1,4 @@
-# Arquitetura — Forzy Digital Twin
+# Arquitetura — Predicta
 
 Documento de arquitetura no modelo **C4** (Contexto → Containers → Componentes),
 acompanhado do fluxo de dados e das decisões registradas nos
@@ -18,7 +18,7 @@ governança) é um módulo independente, ativável por *feature flag*.
 ```mermaid
 flowchart TD
     operador["Operador / Engenheiro<br/>de Manutencao"]
-    forzy["Forzy Digital Twin<br/>(plataforma)"]
+    forzy["Predicta<br/>(plataforma)"]
     motor["Motor industrial<br/>220V + sensores"]
     llm["Provedor LLM<br/>(OpenAI / Anthropic)"]
 
@@ -67,8 +67,8 @@ flowchart LR
         telemetry["telemetry<br/>ingestao + consulta"]
         vision["vision<br/>OCR de placas"]
         gov["governance<br/>auditoria"]
-        ml["ml<br/>(Sprint 3)"]
-        rag["rag<br/>(Sprint 4)"]
+        ml["ml<br/>anomalia + RUL"]
+        rag["rag<br/>chat + RAG"]
     end
     opcua["infra/opcua_client"]
     db["infra/db"]
@@ -110,6 +110,10 @@ sequenceDiagram
 | [0001](adr/0001-stack-tecnologica.md) | Stack: Next.js + FastAPI + PostgreSQL/TimescaleDB |
 | [0002](adr/0002-modelo-dados-timeseries.md) | Séries temporais em hypertables; bancos separados |
 | [0003](adr/0003-ocr-strategy.md) | OCR com PaddleOCR (Claude Vision como alternativa) |
+| [0004](adr/0004-representacao-planta.md) | Planta autorada em SVG; marcadores dinâmicos |
+| [0005](adr/0005-estrategia-ml.md) | ML com scikit-learn (Isolation Forest, autoencoder, regressão) |
+| [0006](adr/0006-estrategia-rag.md) | RAG com embeddings por hashing; LLM com modo offline |
+| [0007](adr/0007-rbac-governanca.md) | RBAC com hierarquia de papéis; usuários com argon2 |
 
 ## 7. Modularidade
 
@@ -120,6 +124,8 @@ carregadas. Isso permite implantações enxutas e evolução sprint a sprint.
 ## 8. Segurança e governança
 
 - **Autenticação:** JWT com expiração curta (15 min). Senhas com argon2.
+- **Controle de acesso (RBAC):** papéis viewer/operator/engineer/admin aplicados
+  no gateway da API; ver [access-control.md](governance/access-control.md).
 - **Auditoria:** middleware registra toda requisição (log JSON) e persiste as
   operações de escrita em `audit_log`.
 - **Classificação de dados:** ver [data-classification.md](governance/data-classification.md).

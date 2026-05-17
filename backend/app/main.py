@@ -1,4 +1,4 @@
-"""Forzy Digital Twin - aplicacao FastAPI (API / BFF).
+"""Predicta - aplicacao FastAPI (API / BFF).
 
 Cada modulo de dominio e exposto condicionalmente conforme as feature flags
 ``FEATURE_*``, garantindo a modularidade exigida pelo projeto.
@@ -28,6 +28,7 @@ from app.modules.automation.router import router as automation_router
 from app.modules.governance.middleware import AuditMiddleware
 from app.modules.governance.router import router as governance_router
 from app.modules.ml.router import router as ml_router
+from app.modules.rag.router import router as rag_router
 from app.modules.telemetry.ingestion import TelemetryIngestionService
 from app.modules.telemetry.router import router as telemetry_router
 from app.modules.vision.router import router as vision_router
@@ -37,7 +38,7 @@ settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger("forzy.main")
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 
 
 @asynccontextmanager
@@ -105,6 +106,8 @@ def create_app() -> FastAPI:
         app.include_router(ml_router, prefix=prefix)
     if settings.feature_alerts:
         app.include_router(alerts_router, prefix=prefix)
+    if settings.feature_rag:
+        app.include_router(rag_router, prefix=prefix)
 
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
@@ -121,7 +124,7 @@ def create_app() -> FastAPI:
     async def root() -> RedirectResponse:
         return RedirectResponse(url="/docs")
 
-    logger.info("Aplicacao Forzy Digital Twin inicializada (v%s)", APP_VERSION)
+    logger.info("Aplicacao Predicta inicializada (v%s)", APP_VERSION)
     return app
 
 

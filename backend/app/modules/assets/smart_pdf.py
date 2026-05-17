@@ -29,7 +29,7 @@ def build_plant_pdf(
     page = landscape(A4)
     width, height = page
     pdf = canvas.Canvas(buffer, pagesize=page)
-    pdf.setTitle(f"Forzy Digital Twin - Planta {plant.name}")
+    pdf.setTitle(f"Predicta - Planta {plant.name}")
 
     # Cabecalho.
     pdf.setFont("Helvetica-Bold", 18)
@@ -88,7 +88,7 @@ def build_plant_pdf(
 
     pdf.setFillColorRGB(0.45, 0.48, 0.55)
     pdf.setFont("Helvetica", 7)
-    pdf.drawString(20 * mm, 10 * mm, "Gerado por Forzy Digital Twin - Sprint 2")
+    pdf.drawString(20 * mm, 10 * mm, "Gerado por Predicta - Sprint 2")
 
     pdf.showPage()
     pdf.save()

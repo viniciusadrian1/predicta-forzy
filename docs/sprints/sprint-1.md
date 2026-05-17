@@ -1,6 +1,6 @@
 # Sprint 1 — Fundamentos do ativo e da base de dados
 
-> Relatório executivo · Forzy Digital Twin · `v0.1.0-sprint1`
+> Relatório executivo · Predicta · `v0.1.0-sprint1`
 
 ## 1. Objetivo
 

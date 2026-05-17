@@ -1,6 +1,6 @@
 # Sprint 2 — Visualização operacional e representação do ativo
 
-> Relatório executivo · Forzy Digital Twin · `v0.2.0-sprint2`
+> Relatório executivo · Predicta · `v0.2.0-sprint2`
 
 ## 1. Objetivo
 

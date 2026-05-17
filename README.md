@@ -1,4 +1,4 @@
-# Forzy Digital Twin
+# Predicta
 
 Plataforma de **Digital Twin** para monitoramento em tempo real e manutenção
 preditiva de motores elétricos industriais (220 V trifásicos). Desenvolvida para o
@@ -68,7 +68,7 @@ Pré-requisitos: **Docker** + **Docker Compose v2**.
 
 ```bash
 # 1. Entrar no diretorio do projeto
-cd forzy-digital-twin
+cd predicta
 
 # 2. Criar o arquivo de ambiente
 cp .env.example .env
@@ -89,8 +89,9 @@ docker compose exec backend python -m app.scripts.seed
 #    OPC-UA ........... opc.tcp://localhost:4840/forzy/server/
 ```
 
-Após ~1 minuto, a tela `http://localhost:3001/asset/MTR-001` exibe o gráfico de
-temperatura atualizando em tempo real.
+Faça login com `admin` / `admin123`. Após ~1 minuto, a tela
+`http://localhost:3001/asset/MTR-001` exibe o gráfico de temperatura em tempo
+real; o assistente de troubleshooting fica disponível em `/chat`.
 
 ## Estrutura
 
@@ -111,19 +112,22 @@ assets/     Plantas, modelos 3D e amostras de placas
 | 1 | Fundamentos: simulador, telemetria, cadastro, base de dados | concluída |
 | 2 | Planta interativa, OCR de placas, telemetria completa | concluída |
 | 3 | ML: baseline, anomalia, RUL e alertas | concluída |
-| 4 | RAG conversacional, governança e deploy | planejada |
+| 4 | RAG conversacional, governança e deploy | concluída |
 
 ## Stack
 
 Next.js 14 · FastAPI · PostgreSQL 16 · TimescaleDB · ChromaDB · `asyncua` ·
-scikit-learn · PyTorch · LangChain · Docker Compose.
+scikit-learn · API Anthropic · Docker Compose · Kubernetes.
 
 ## Documentação
 
 - [`docs/architecture.md`](docs/architecture.md) — visão C4 da arquitetura
 - [`docs/adr/`](docs/adr/) — decisões arquiteturais (ADRs)
 - [`docs/sprints/`](docs/sprints/) — relatórios executivos por sprint
-- [`docs/governance/`](docs/governance/) — classificação de dados e controle de acesso
+- [`docs/governance/`](docs/governance/) — classificação de dados e controle de acesso (RBAC)
+- [`docs/demo-scenario.md`](docs/demo-scenario.md) — roteiro de demonstração ponta a ponta
+- [`docs/video-script.md`](docs/video-script.md) — roteiro do vídeo de demonstração
+- [`deploy/`](deploy/) — artefatos de implantação (Docker Compose de produção e Kubernetes)
 
 ## Licença
 
