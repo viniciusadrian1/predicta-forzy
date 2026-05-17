@@ -12,6 +12,8 @@ os.environ.setdefault("FEATURE_ASSETS", "true")
 os.environ.setdefault("FEATURE_TELEMETRY", "true")
 os.environ.setdefault("FEATURE_VISION", "true")
 os.environ.setdefault("FEATURE_AUTOMATION", "true")
+os.environ.setdefault("FEATURE_ML", "true")
+os.environ.setdefault("FEATURE_ALERTS", "true")
 os.environ.setdefault("FEATURE_GOVERNANCE", "false")
 
 from collections.abc import AsyncGenerator  # noqa: E402
