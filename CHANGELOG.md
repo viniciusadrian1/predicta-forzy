@@ -7,6 +7,28 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.2.0] — Sprint 2 — Visualização operacional e representação do ativo
+
+### Added
+
+- **Planta baixa interativa** — SVG da planta + componente `PlantMap` com
+  marcadores de ativo clicáveis, coloridos por status e com tooltip.
+- **PDF inteligente** — `GET /plants/{id}/smart-pdf` (reportlab) com snapshot da
+  telemetria e links clicáveis para os ativos.
+- **OCR de placas** — módulo `vision/plate_ocr.py` (pré-processamento + parser
+  regex + motor PaddleOCR opcional) e 4 placas sintéticas de exemplo.
+- **Telemetria completa** — página do ativo com os 6 sensores, sparkline,
+  janelas temporais (1h/24h/7d/30d) e exportação CSV.
+- **Hierarquia e busca** — endpoint `/hierarchy`, busca/filtros em `/assets` e
+  sidebar de navegação Planta→Área→Ativo.
+- **RPA** — módulo `automation` com `POST /automation/register-from-image`
+  (OCR → rascunho → deduplicação → cadastro) e página `/register`.
+- ADR 0004 (representação da planta) e testes e2e Playwright.
+
+### Changed
+
+- Telemetria em tempo real para as 6 variáveis (antes só temperatura).
+
 ## [0.1.0] — Sprint 1 — Fundamentos do ativo e da base de dados
 
 ### Added

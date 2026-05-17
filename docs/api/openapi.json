@@ -104,18 +104,98 @@
           "assets"
         ],
         "summary": "List Assets",
+        "description": "Lista os ativos, com busca textual e filtros opcionais.",
         "operationId": "list_assets_api_v1_assets_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Busca por TAG, nome, fabricante ou modelo",
+              "title": "Search"
+            },
+            "description": "Busca por TAG, nome, fabricante ou modelo"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "asset_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Type"
+            }
+          },
+          {
+            "name": "plant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plant Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/AssetOut"
                   },
-                  "type": "array",
                   "title": "Response List Assets Api V1 Assets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -129,14 +209,14 @@
         "summary": "Create Asset",
         "operationId": "create_asset_api_v1_assets_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AssetIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -155,6 +235,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hierarchy": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Get Hierarchy",
+        "description": "Devolve a arvore Planta -> Area -> Ativo.",
+        "operationId": "get_hierarchy_api_v1_hierarchy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HierarchyPlant"
+                  },
+                  "type": "array",
+                  "title": "Response Get Hierarchy Api V1 Hierarchy Get"
                 }
               }
             }
@@ -415,6 +521,108 @@
         }
       }
     },
+    "/api/v1/plants/{plant_id}/smart-pdf": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Plant Smart Pdf",
+        "description": "Gera o PDF interativo da planta com o snapshot da telemetria.",
+        "operationId": "plant_smart_pdf_api_v1_plants__plant_id__smart_pdf_get",
+        "parameters": [
+          {
+            "name": "plant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/register-from-image": {
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Register From Image",
+        "description": "Fluxo de RPA: OCR da placa, rascunho, deduplicacao e cadastro opcional.",
+        "operationId": "register_from_image_api_v1_automation_register_from_image_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_register_from_image_api_v1_automation_register_from_image_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpaRegisterResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/telemetry": {
       "get": {
         "tags": [
@@ -593,6 +801,63 @@
               "title": "Tag"
             },
             "description": "Filtra por TAG do ativo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry/{tag}/export": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Export Telemetry Csv",
+        "description": "Exporta a serie temporal do ativo em formato CSV.",
+        "operationId": "export_telemetry_csv_api_v1_telemetry__tag__export_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "variable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Variable"
+            }
           }
         ],
         "responses": {
@@ -819,6 +1084,112 @@
           "updated_at"
         ],
         "title": "AreaOut"
+      },
+      "AssetDraft": {
+        "properties": {
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          },
+          "nominal_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Current A"
+          },
+          "nominal_rpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Rpm"
+          },
+          "ip_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Rating"
+          },
+          "insulation_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insulation Class"
+          }
+        },
+        "type": "object",
+        "title": "AssetDraft",
+        "description": "Rascunho de ativo pre-preenchido a partir do OCR da placa."
       },
       "AssetIn": {
         "properties": {
@@ -1629,6 +2000,36 @@
         ],
         "title": "Body_extract_from_image_api_v1_assets_extract_from_image_post"
       },
+      "Body_register_from_image_api_v1_automation_register_from_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          },
+          "auto_create": {
+            "type": "boolean",
+            "title": "Auto Create",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_register_from_image_api_v1_automation_register_from_image_post"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1670,6 +2071,111 @@
         ],
         "title": "HealthResponse",
         "description": "Resposta do endpoint de healthcheck."
+      },
+      "HierarchyArea": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/HierarchyAsset"
+            },
+            "type": "array",
+            "title": "Assets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "code",
+          "assets"
+        ],
+        "title": "HierarchyArea"
+      },
+      "HierarchyAsset": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "asset_type": {
+            "type": "string",
+            "title": "Asset Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tag",
+          "name",
+          "asset_type",
+          "status"
+        ],
+        "title": "HierarchyAsset"
+      },
+      "HierarchyPlant": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/HierarchyArea"
+            },
+            "type": "array",
+            "title": "Areas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "code",
+          "areas"
+        ],
+        "title": "HierarchyPlant"
       },
       "LatestOut": {
         "properties": {
@@ -1767,6 +2273,14 @@
             "type": "string",
             "title": "Engine"
           },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "coverage": {
+            "type": "number",
+            "title": "Coverage"
+          },
           "fields": {
             "items": {
               "$ref": "#/components/schemas/NameplateField"
@@ -1784,6 +2298,8 @@
           "filename",
           "size_bytes",
           "engine",
+          "raw_text",
+          "coverage",
           "fields",
           "note"
         ],
@@ -1907,6 +2423,52 @@
           "updated_at"
         ],
         "title": "PlantOut"
+      },
+      "RpaRegisterResult": {
+        "properties": {
+          "ocr_engine": {
+            "type": "string",
+            "title": "Ocr Engine"
+          },
+          "ocr_coverage": {
+            "type": "number",
+            "title": "Ocr Coverage"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/NameplateField"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/AssetDraft"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ocr_engine",
+          "ocr_coverage",
+          "fields",
+          "draft",
+          "duplicate",
+          "created",
+          "message"
+        ],
+        "title": "RpaRegisterResult",
+        "description": "Resultado do fluxo de RPA de cadastro a partir de foto."
       },
       "TelemetryPoint": {
         "properties": {
