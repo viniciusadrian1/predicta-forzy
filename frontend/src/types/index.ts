@@ -136,3 +136,51 @@ export interface RpaResult {
   created: boolean;
   message: string;
 }
+
+// --- Machine Learning ---
+export interface BaselinePrediction {
+  ready: boolean;
+  available: boolean;
+  asset_tag: string | null;
+  score: number | null;
+  decision: string | null;
+  model_version: string | null;
+}
+
+export interface AnomalyPrediction {
+  ready: boolean;
+  available: boolean;
+  asset_tag: string | null;
+  reconstruction_error: number | null;
+  threshold: number | null;
+  is_anomaly: boolean | null;
+  model_version: string | null;
+}
+
+export interface RulEstimate {
+  ready: boolean;
+  available: boolean;
+  asset_tag: string | null;
+  rul_days: number | null;
+  confidence_low_days: number | null;
+  confidence_high_days: number | null;
+  current_vibration: number | null;
+  trend_mm_s_per_day: number | null;
+  model_version: string | null;
+  note: string | null;
+}
+
+// --- Alertas ---
+export interface Alert {
+  id: string;
+  asset_tag: string;
+  severity: string;
+  alert_type: string;
+  message: string;
+  ml_score: number | null;
+  created_at: string;
+  acknowledged: boolean;
+  ack_by: string | null;
+  ack_at: string | null;
+  ack_comment: string | null;
+}

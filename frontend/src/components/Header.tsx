@@ -23,6 +23,14 @@ export function Header() {
           <Activity className="h-5 w-5 text-cyan-400" />
           Forzy Digital Twin
         </Link>
+        <nav className="flex items-center gap-4 text-sm">
+          <Link href="/dashboard" className="text-slate-400 hover:text-slate-200">
+            Painel
+          </Link>
+          <Link href="/alerts" className="text-slate-400 hover:text-slate-200">
+            Alertas
+          </Link>
+        </nav>
         <div className="text-sm">
           {mounted && username ? (
             <div className="flex items-center gap-3">

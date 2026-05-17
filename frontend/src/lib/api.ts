@@ -1,12 +1,16 @@
 import { useAuth } from "@/lib/auth";
 import type {
+  Alert,
+  AnomalyPrediction,
   Asset,
   AuthToken,
+  BaselinePrediction,
   HierarchyPlant,
   LatestSnapshot,
   NameplateExtraction,
   Plant,
   RpaResult,
+  RulEstimate,
   TelemetrySeries,
 } from "@/types";
 
@@ -156,4 +160,69 @@ export function smartPdfUrl(plantId: string): string {
 export function telemetryCsvUrl(tag: string, variable?: string): string {
   const suffix = variable ? `?variable=${encodeURIComponent(variable)}` : "";
   return apiUrl(`/telemetry/${encodeURIComponent(tag)}/export${suffix}`);
+}
+
+// --- Alertas ---
+export async function getAlerts(
+  params: { tag?: string; severity?: string; onlyActive?: boolean } = {},
+): Promise<Alert[]> {
+  const query = new URLSearchParams();
+  if (params.tag) query.set("tag", params.tag);
+  if (params.severity) query.set("severity", params.severity);
+  if (params.onlyActive) query.set("only_active", "true");
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return parse<Alert[]>(await fetch(apiUrl(`/alerts${suffix}`), { cache: "no-store" }));
+}
+
+export async function acknowledgeAlert(id: string, comment: string): Promise<Alert> {
+  const response = await fetch(apiUrl(`/alerts/${id}/ack`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ comment: comment || null }),
+  });
+  return parse<Alert>(response);
+}
+
+// --- Machine Learning ---
+export async function predictBaseline(tag: string): Promise<BaselinePrediction> {
+  const response = await fetch(apiUrl("/ml/baseline/predict"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ asset_tag: tag }),
+  });
+  return parse<BaselinePrediction>(response);
+}
+
+export async function predictAnomaly(tag: string): Promise<AnomalyPrediction> {
+  const response = await fetch(apiUrl("/ml/anomaly/predict"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ asset_tag: tag }),
+  });
+  return parse<AnomalyPrediction>(response);
+}
+
+export async function getRul(tag: string): Promise<RulEstimate> {
+  return parse<RulEstimate>(
+    await fetch(apiUrl(`/ml/rul/${encodeURIComponent(tag)}`), { cache: "no-store" }),
+  );
+}
+
+export interface MlFeedbackInput {
+  asset_tag: string;
+  model: string;
+  prediction: string;
+  is_correct: boolean;
+  comment?: string;
+}
+
+export async function sendMlFeedback(
+  input: MlFeedbackInput,
+): Promise<{ recorded: boolean; message: string }> {
+  const response = await fetch(apiUrl("/ml/feedback"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(input),
+  });
+  return parse<{ recorded: boolean; message: string }>(response);
 }

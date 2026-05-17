@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+import { AssetHealth } from "@/components/AssetHealth";
 import { Header } from "@/components/Header";
 import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -98,6 +99,8 @@ export default function AssetPage({ params }: AssetPageProps) {
                 ))}
               </div>
             </section>
+
+            <AssetHealth tag={asset.tag} />
 
             <Card>
               <CardHeader>
