@@ -15,7 +15,7 @@ export function Header() {
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/50">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+      <div className="mx-auto flex max-w-[1536px] items-center justify-between px-6 py-3 lg:px-8">
         <Link
           href="/dashboard"
           className="flex items-center gap-2 font-semibold text-slate-100"

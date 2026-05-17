@@ -61,7 +61,7 @@ export default function AssetPage({ params }: AssetPageProps) {
   return (
     <div>
       <Header />
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
         <Link
           href="/dashboard"
           className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200"

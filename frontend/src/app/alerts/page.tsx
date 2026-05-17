@@ -46,7 +46,7 @@ export default function AlertsPage() {
   return (
     <div>
       <Header />
-      <main className="mx-auto max-w-5xl px-6 py-8">
+      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
         <div className="mb-1 flex items-baseline justify-between">
           <h1 className="text-xl font-semibold text-slate-100">Alertas</h1>
           <span className="text-sm text-slate-400">

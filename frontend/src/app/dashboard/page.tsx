@@ -68,7 +68,7 @@ export default function DashboardPage() {
   return (
     <div>
       <Header />
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 lg:flex-row">
+      <div className="mx-auto flex max-w-[1536px] flex-col gap-6 px-6 py-8 lg:flex-row lg:px-8">
         <Sidebar />
         <main className="flex-1">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -178,7 +178,7 @@ export default function DashboardPage() {
             <p className="text-slate-400">Nenhum ativo encontrado.</p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {assetsQuery.data?.map((asset) => (
               <AssetCard key={asset.id} asset={asset} />
             ))}

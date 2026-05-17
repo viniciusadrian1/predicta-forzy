@@ -27,7 +27,7 @@ export default function PlantPage({ params }: PlantPageProps) {
   return (
     <div>
       <Header />
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-100">
