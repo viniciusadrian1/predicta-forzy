@@ -3,7 +3,7 @@
   "info": {
     "title": "Forzy Digital Twin",
     "description": "Plataforma de Digital Twin para monitoramento e manutencao preditiva de motores eletricos industriais.",
-    "version": "0.1.0"
+    "version": "0.3.0"
   },
   "paths": {
     "/api/v1/auth/login": {
@@ -974,6 +974,399 @@
         }
       }
     },
+    "/api/v1/ml/status": {
+      "get": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Ml Status",
+        "description": "Estado dos modelos de ML em memoria.",
+        "operationId": "ml_status_api_v1_ml_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MlStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/train": {
+      "post": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Ml Train",
+        "description": "Forca o retreino dos modelos a partir da telemetria recente.",
+        "operationId": "ml_train_api_v1_ml_train_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MlStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/baseline/predict": {
+      "post": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Baseline Predict",
+        "description": "Avalia o ponto de operacao do ativo (Isolation Forest).",
+        "operationId": "baseline_predict_api_v1_ml_baseline_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaselinePrediction"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/anomaly/predict": {
+      "post": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Anomaly Predict",
+        "description": "Detecta anomalia de vibracao por erro de reconstrucao (autoencoder).",
+        "operationId": "anomaly_predict_api_v1_ml_anomaly_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnomalyPrediction"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/rul/{tag}": {
+      "get": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Rul Estimate",
+        "description": "Estima a vida util remanescente (RUL) do ativo.",
+        "operationId": "rul_estimate_api_v1_ml_rul__tag__get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulEstimate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ml/feedback": {
+      "post": {
+        "tags": [
+          "ml"
+        ],
+        "summary": "Ml Feedback",
+        "description": "Registra um reporte de predicao incorreta (loop de feedback).",
+        "operationId": "ml_feedback_api_v1_ml_feedback_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "List Alerts",
+        "description": "Lista os alertas, com filtros opcionais por ativo e severidade.",
+        "operationId": "list_alerts_api_v1_alerts_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "only_active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Only Active"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response List Alerts Api V1 Alerts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{alert_id}/ack": {
+      "post": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Acknowledge Alert",
+        "description": "Reconhece (ack) um alerta, com comentario opcional.",
+        "operationId": "acknowledge_alert_api_v1_alerts__alert_id__ack_post",
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Alert Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertAck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "summary": "Metrics",
@@ -1015,6 +1408,193 @@
   },
   "components": {
     "schemas": {
+      "AlertAck": {
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "AlertAck",
+        "description": "Payload de reconhecimento (ack) de um alerta."
+      },
+      "AlertOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "alert_type": {
+            "type": "string",
+            "title": "Alert Type"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "ml_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ml Score"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "acknowledged": {
+            "type": "boolean",
+            "title": "Acknowledged"
+          },
+          "ack_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ack By"
+          },
+          "ack_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ack At"
+          },
+          "ack_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ack Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "asset_tag",
+          "severity",
+          "alert_type",
+          "message",
+          "ml_score",
+          "created_at",
+          "acknowledged",
+          "ack_by",
+          "ack_at",
+          "ack_comment"
+        ],
+        "title": "AlertOut",
+        "description": "Alerta exposto pela API."
+      },
+      "AnomalyPrediction": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "reconstruction_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconstruction Error"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "is_anomaly": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Anomaly"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "AnomalyPrediction",
+        "description": "Resultado do detector de anomalias (autoencoder de reconstrucao)."
+      },
       "AreaIn": {
         "properties": {
           "plant_id": {
@@ -1986,6 +2566,69 @@
         "title": "AuditEntryOut",
         "description": "Registro de auditoria exposto pela API."
       },
+      "BaselinePrediction": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "BaselinePrediction",
+        "description": "Resultado do modelo de baseline (Isolation Forest)."
+      },
       "Body_extract_from_image_api_v1_assets_extract_from_image_post": {
         "properties": {
           "file": {
@@ -2029,6 +2672,64 @@
           "file"
         ],
         "title": "Body_register_from_image_api_v1_automation_register_from_image_post"
+      },
+      "FeedbackRequest": {
+        "properties": {
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prediction": {
+            "type": "string",
+            "title": "Prediction"
+          },
+          "is_correct": {
+            "type": "boolean",
+            "title": "Is Correct"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_tag",
+          "model",
+          "prediction",
+          "is_correct"
+        ],
+        "title": "FeedbackRequest",
+        "description": "Reporte de predicao incorreta (loop de feedback - governanca de ML)."
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "title": "Recorded"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recorded",
+          "message"
+        ],
+        "title": "FeedbackResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2252,6 +2953,54 @@
         ],
         "title": "LoginIn"
       },
+      "MlStatus": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          },
+          "n_samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "MlStatus",
+        "description": "Estado dos modelos de ML em memoria."
+      },
       "NameplateExtractionOut": {
         "properties": {
           "filename": {
@@ -2424,6 +3173,17 @@
         ],
         "title": "PlantOut"
       },
+      "PredictRequest": {
+        "properties": {
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag",
+            "default": "MTR-001"
+          }
+        },
+        "type": "object",
+        "title": "PredictRequest"
+      },
       "RpaRegisterResult": {
         "properties": {
           "ocr_engine": {
@@ -2469,6 +3229,113 @@
         ],
         "title": "RpaRegisterResult",
         "description": "Resultado do fluxo de RPA de cadastro a partir de foto."
+      },
+      "RulEstimate": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "rul_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rul Days"
+          },
+          "confidence_low_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Low Days"
+          },
+          "confidence_high_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence High Days"
+          },
+          "current_vibration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Vibration"
+          },
+          "trend_mm_s_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Mm S Per Day"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "title": "RulEstimate",
+        "description": "Estimativa de vida util remanescente (RUL)."
       },
       "TelemetryPoint": {
         "properties": {

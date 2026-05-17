@@ -7,6 +7,24 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.3.0] — Sprint 3 — Inteligência operacional e apoio à decisão
+
+### Added
+
+- **Dataset histórico** — gerador de 90 dias de telemetria sintética
+  (`edge/data_generator/generate_dataset.py`).
+- **Modelos de ML** — baseline (Isolation Forest), detecção de anomalia
+  (autoencoder MLP) e estimativa de RUL; pipelines em `ml/pipelines/` e
+  endpoints `POST /ml/baseline/predict`, `POST /ml/anomaly/predict`,
+  `GET /ml/rul/{tag}`.
+- **Sistema de alertas** — tabela `alerts` (migration `0002`), avaliador
+  periódico (regras de limite + ML) e endpoints `GET /alerts` e
+  `POST /alerts/{id}/ack`.
+- **Frontend** — página `/alerts`, seção "Saúde do ativo", notificações
+  *toast* em tempo real e badges do mapa por status.
+- **Governança de ML** — `ai-ethics.md`, logging de predições e feedback.
+- ADR 0005 (estratégia de ML) e 4 notebooks em `ml/notebooks/`.
+
 ## [0.2.0] — Sprint 2 — Visualização operacional e representação do ativo
 
 ### Added

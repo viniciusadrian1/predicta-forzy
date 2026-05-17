@@ -110,7 +110,7 @@ assets/     Plantas, modelos 3D e amostras de placas
 |---|---|---|
 | 1 | Fundamentos: simulador, telemetria, cadastro, base de dados | concluída |
 | 2 | Planta interativa, OCR de placas, telemetria completa | concluída |
-| 3 | ML: baseline, anomalia, RUL e alertas | planejada |
+| 3 | ML: baseline, anomalia, RUL e alertas | concluída |
 | 4 | RAG conversacional, governança e deploy | planejada |
 
 ## Stack
