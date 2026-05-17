@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infra.db.base import get_catalog_session
+from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.assets.models import Area, Asset, Plant
 from app.modules.assets.repository import AssetRepository
 from app.modules.assets.schemas import (
@@ -14,6 +16,7 @@ from app.modules.assets.schemas import (
     AssetIn,
     AssetOut,
     AssetUpdate,
+    HierarchyPlant,
     PlantIn,
     PlantOut,
 )
@@ -23,6 +26,8 @@ from app.modules.assets.service import (
     AssetService,
     PlantNotFoundError,
 )
+from app.modules.assets.smart_pdf import build_plant_pdf
+from app.modules.telemetry.repository import TelemetryRepository
 
 router = APIRouter(tags=["assets"])
 
@@ -37,9 +42,26 @@ async def get_asset_service(
 # ----------------------------- Assets -----------------------------
 @router.get("/assets", response_model=list[AssetOut])
 async def list_assets(
+    search: str | None = Query(
+        default=None, description="Busca por TAG, nome, fabricante ou modelo"
+    ),
+    status_filter: str | None = Query(default=None, alias="status"),
+    asset_type: str | None = Query(default=None),
+    plant_id: UUID | None = Query(default=None),
     service: AssetService = Depends(get_asset_service),
 ) -> list[Asset]:
+    """Lista os ativos, com busca textual e filtros opcionais."""
+    if any((search, status_filter, asset_type, plant_id)):
+        return await service.search_assets(search, status_filter, asset_type, plant_id)
     return await service.list_assets()
+
+
+@router.get("/hierarchy", response_model=list[HierarchyPlant])
+async def get_hierarchy(
+    service: AssetService = Depends(get_asset_service),
+) -> list[Plant]:
+    """Devolve a arvore Planta -> Area -> Ativo."""
+    return await service.get_hierarchy()
 
 
 @router.post("/assets", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
@@ -124,3 +146,25 @@ async def create_area(payload: AreaIn, service: AssetService = Depends(get_asset
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Planta '{exc}' nao encontrada",
         ) from exc
+
+
+@router.get("/plants/{plant_id}/smart-pdf")
+async def plant_smart_pdf(
+    plant_id: UUID,
+    catalog: AsyncSession = Depends(get_catalog_session),
+    timeseries: AsyncSession = Depends(get_timeseries_session),
+) -> Response:
+    """Gera o PDF interativo da planta com o snapshot da telemetria."""
+    asset_repo = AssetRepository(catalog)
+    plant = await asset_repo.get_plant(plant_id)
+    if plant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planta nao encontrada")
+    plant_assets = await asset_repo.search_assets(plant_id=plant_id)
+    telemetry_repo = TelemetryRepository(timeseries)
+    latest_by_tag = {asset.tag: await telemetry_repo.latest(asset.tag) for asset in plant_assets}
+    pdf_bytes = build_plant_pdf(plant, plant_assets, latest_by_tag)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="planta-{plant.code}.pdf"'},
+    )

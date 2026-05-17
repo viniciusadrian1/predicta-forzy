@@ -22,6 +22,7 @@ from app.infra.db.base import timeseries_engine
 from app.infra.db.timescale import init_timeseries_schema
 from app.modules.assets.router import router as assets_router
 from app.modules.auth.router import router as auth_router
+from app.modules.automation.router import router as automation_router
 from app.modules.governance.middleware import AuditMiddleware
 from app.modules.governance.router import router as governance_router
 from app.modules.telemetry.ingestion import TelemetryIngestionService
@@ -85,6 +86,8 @@ def create_app() -> FastAPI:
         app.include_router(auth_router, prefix=prefix)
     if settings.feature_assets:
         app.include_router(assets_router, prefix=prefix)
+    if settings.feature_automation:
+        app.include_router(automation_router, prefix=prefix)
     if settings.feature_telemetry:
         app.include_router(telemetry_router, prefix=prefix)
     if settings.feature_vision:

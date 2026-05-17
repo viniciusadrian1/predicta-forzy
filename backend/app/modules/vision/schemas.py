@@ -20,5 +20,7 @@ class NameplateExtractionOut(BaseModel):
     filename: str | None
     size_bytes: int
     engine: str
+    raw_text: str
+    coverage: float
     fields: list[NameplateField]
     note: str

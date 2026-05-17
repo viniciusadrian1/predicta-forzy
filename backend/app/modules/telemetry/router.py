@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 from collections.abc import AsyncGenerator
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,4 +78,33 @@ async def stream_telemetry(
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/telemetry/{tag}/export")
+async def export_telemetry_csv(
+    tag: str,
+    variable: str | None = Query(default=None),
+    service: TelemetryService = Depends(get_telemetry_service),
+) -> Response:
+    """Exporta a serie temporal do ativo em formato CSV."""
+    series = await service.query(tag, variable, limit=10_000)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["time", "asset_tag", "variable", "value", "unit", "quality"])
+    for point in series.points:
+        writer.writerow(
+            [
+                point.time.isoformat(),
+                series.asset_tag,
+                point.variable,
+                point.value,
+                point.unit,
+                point.quality,
+            ]
+        )
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="telemetria-{tag}.csv"'},
     )

@@ -1,45 +1,24 @@
 """Endpoints REST do modulo de visao computacional (OCR de placas).
 
-Sprint 1: stub que devolve dados mockados no formato final esperado.
-Sprint 2: implementacao real com PaddleOCR (ver ADR 0003).
+Sprint 2: OCR real com pipeline pre-processamento -> motor -> parser
+(ver ``app/modules/vision/plate_ocr.py`` e ADR 0003). O motor PaddleOCR e um
+extra opcional; sem ele, o endpoint opera em modo simulado.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
+from app.modules.vision.plate_ocr import extract_nameplate
 from app.modules.vision.schemas import NameplateExtractionOut, NameplateField
 
 router = APIRouter(tags=["vision"])
 
-# Campos mockados (placa tipica de motor WEG) - substituidos por OCR na Sprint 2.
-_MOCK_FIELDS: list[NameplateField] = [
-    NameplateField(field="manufacturer", label="Fabricante", value="WEG", confidence=0.94),
-    NameplateField(field="model", label="Modelo", value="W22 IR3 Premium", confidence=0.89),
-    NameplateField(field="power_kw", label="Potencia (kW)", value="7.5", confidence=0.92),
-    NameplateField(field="voltage_v", label="Tensao (V)", value="220/380", confidence=0.90),
-    NameplateField(
-        field="nominal_current_a",
-        label="Corrente nominal (A)",
-        value="25.4/14.7",
-        confidence=0.86,
-    ),
-    NameplateField(field="frequency_hz", label="Frequencia (Hz)", value="60", confidence=0.95),
-    NameplateField(field="nominal_rpm", label="Rotacao (RPM)", value="1755", confidence=0.88),
-    NameplateField(field="ip_rating", label="Grau de protecao", value="IP55", confidence=0.91),
-    NameplateField(
-        field="insulation_class",
-        label="Classe de isolamento",
-        value="F",
-        confidence=0.84,
-    ),
-    NameplateField(
-        field="service_factor",
-        label="Fator de servico",
-        value="1.15",
-        confidence=0.80,
-    ),
-]
+_OCR_NOTE = "Campos extraidos por OCR (PaddleOCR) da imagem enviada."
+_STUB_NOTE = (
+    "Motor de OCR (PaddleOCR) nao instalado - exibindo dados de exemplo. "
+    "Instale o extra com 'pip install .[ocr]' para habilitar o OCR real."
+)
 
 
 @router.post("/assets/extract-from-image", response_model=NameplateExtractionOut)
@@ -48,13 +27,30 @@ async def extract_from_image(
 ) -> NameplateExtractionOut:
     """Extrai os dados da placa de identificacao de um ativo a partir de uma imagem."""
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Imagem vazia")
+    try:
+        result = extract_nameplate(content)
+    except Exception as exc:  # imagem invalida ou corrompida
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Nao foi possivel processar a imagem: {exc}",
+        ) from exc
+
     return NameplateExtractionOut(
         filename=file.filename,
         size_bytes=len(content),
-        engine="stub",
-        fields=list(_MOCK_FIELDS),
-        note=(
-            "Resposta simulada da Sprint 1. O OCR real (PaddleOCR) sera "
-            "implementado na Sprint 2 - ver docs/adr/0003-ocr-strategy.md."
-        ),
+        engine=result.engine,
+        raw_text=result.raw_text,
+        coverage=result.coverage,
+        fields=[
+            NameplateField(
+                field=field.field,
+                label=field.label,
+                value=field.value,
+                confidence=field.confidence,
+            )
+            for field in result.fields
+        ],
+        note=_OCR_NOTE if result.engine == "paddleocr" else _STUB_NOTE,
     )

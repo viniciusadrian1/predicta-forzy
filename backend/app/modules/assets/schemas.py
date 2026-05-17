@@ -106,3 +106,32 @@ class AssetOut(AssetBase):
     tag: str
     created_at: datetime
     updated_at: datetime
+
+
+# ------------------------ Hierarquia ------------------------
+class HierarchyAsset(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tag: str
+    name: str | None
+    asset_type: str
+    status: str
+
+
+class HierarchyArea(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    code: str
+    assets: list[HierarchyAsset]
+
+
+class HierarchyPlant(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    code: str
+    areas: list[HierarchyArea]

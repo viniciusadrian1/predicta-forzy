@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.assets.models import Area, Asset, Plant
 
@@ -64,3 +65,37 @@ class AssetRepository:
         await self._session.commit()
         await self._session.refresh(area)
         return area
+
+    # ----------------------- Busca / hierarquia -----------------------
+    async def search_assets(
+        self,
+        search: str | None = None,
+        status: str | None = None,
+        asset_type: str | None = None,
+        plant_id: UUID | None = None,
+    ) -> list[Asset]:
+        stmt = select(Asset)
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(
+                Asset.tag.ilike(like)
+                | Asset.name.ilike(like)
+                | Asset.manufacturer.ilike(like)
+                | Asset.model.ilike(like)
+            )
+        if status:
+            stmt = stmt.where(Asset.status == status)
+        if asset_type:
+            stmt = stmt.where(Asset.asset_type == asset_type)
+        if plant_id:
+            stmt = stmt.where(Asset.plant_id == plant_id)
+        result = await self._session.execute(stmt.order_by(Asset.tag))
+        return list(result.scalars().all())
+
+    async def list_hierarchy(self) -> list[Plant]:
+        result = await self._session.execute(
+            select(Plant)
+            .options(selectinload(Plant.areas).selectinload(Area.assets))
+            .order_by(Plant.code)
+        )
+        return list(result.scalars().all())

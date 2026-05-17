@@ -115,6 +115,7 @@ services:
       CHROMA_HOST: chromadb
       OPCUA_ENDPOINT: opc.tcp://opcua-simulator:4840/forzy/server/
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      FEATURE_AUTOMATION: "true"
     ports:
       - "8000:8000"
     depends_on:

@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     feature_vision: bool = True
     feature_ml: bool = False
     feature_rag: bool = False
-    feature_automation: bool = False
+    feature_automation: bool = True
     feature_governance: bool = True
 
     @property

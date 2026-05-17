@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.modules.assets.models import Area, Asset, Plant
 from app.modules.assets.repository import AssetRepository
 from app.modules.assets.schemas import AreaIn, AssetIn, AssetUpdate, PlantIn
@@ -63,3 +65,16 @@ class AssetService:
         if await self._repo.get_plant(payload.plant_id) is None:
             raise PlantNotFoundError(str(payload.plant_id))
         return await self._repo.add_area(Area(**payload.model_dump()))
+
+    # ----------------------- Busca / hierarquia -----------------------
+    async def search_assets(
+        self,
+        search: str | None,
+        status: str | None,
+        asset_type: str | None,
+        plant_id: UUID | None,
+    ) -> list[Asset]:
+        return await self._repo.search_assets(search, status, asset_type, plant_id)
+
+    async def get_hierarchy(self) -> list[Plant]:
+        return await self._repo.list_hierarchy()
