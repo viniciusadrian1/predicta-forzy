@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_actor
+from app.core.rbac import require_role
 from app.infra.db.base import get_catalog_session
 from app.modules.alerts.models import Alert
 from app.modules.alerts.repository import AlertRepository
@@ -35,7 +36,11 @@ async def list_alerts(
     return await service.list_alerts(tag, severity, only_active, limit)
 
 
-@router.post("/alerts/{alert_id}/ack", response_model=AlertOut)
+@router.post(
+    "/alerts/{alert_id}/ack",
+    response_model=AlertOut,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def acknowledge_alert(
     alert_id: UUID,
     payload: AlertAck,

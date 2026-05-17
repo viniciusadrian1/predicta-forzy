@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rbac import require_role
 from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.assets.models import Area, Asset, Plant
 from app.modules.assets.repository import AssetRepository
@@ -64,7 +65,12 @@ async def get_hierarchy(
     return await service.get_hierarchy()
 
 
-@router.post("/assets", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/assets",
+    response_model=AssetOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def create_asset(
     payload: AssetIn, service: AssetService = Depends(get_asset_service)
 ) -> Asset:

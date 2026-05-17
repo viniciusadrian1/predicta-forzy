@@ -7,8 +7,9 @@ extra opcional; sem ele, o endpoint opera em modo simulado.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.core.rbac import require_role
 from app.modules.vision.plate_ocr import extract_nameplate
 from app.modules.vision.schemas import NameplateExtractionOut, NameplateField
 
@@ -21,7 +22,11 @@ _STUB_NOTE = (
 )
 
 
-@router.post("/assets/extract-from-image", response_model=NameplateExtractionOut)
+@router.post(
+    "/assets/extract-from-image",
+    response_model=NameplateExtractionOut,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def extract_from_image(
     file: UploadFile = File(...),
 ) -> NameplateExtractionOut:

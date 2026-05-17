@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_actor
+from app.core.rbac import require_role
 from app.infra.db.base import get_timeseries_session
 from app.modules.ml.schemas import (
     AnomalyPrediction,
@@ -27,7 +28,11 @@ async def ml_status() -> MlStatus:
     return ml_service.status()
 
 
-@router.post("/ml/train", response_model=MlStatus)
+@router.post(
+    "/ml/train",
+    response_model=MlStatus,
+    dependencies=[Depends(require_role("engineer"))],
+)
 async def ml_train(
     session: AsyncSession = Depends(get_timeseries_session),
 ) -> MlStatus:

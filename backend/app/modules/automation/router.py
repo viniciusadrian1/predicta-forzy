@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_actor
+from app.core.rbac import require_role
 from app.infra.db.base import get_catalog_session
 from app.modules.assets.repository import AssetRepository
 from app.modules.automation.schemas import RpaRegisterResult
@@ -14,7 +15,11 @@ from app.modules.automation.service import RpaService
 router = APIRouter(tags=["automation"])
 
 
-@router.post("/automation/register-from-image", response_model=RpaRegisterResult)
+@router.post(
+    "/automation/register-from-image",
+    response_model=RpaRegisterResult,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def register_from_image(
     file: UploadFile = File(...),
     tag: str | None = Form(default=None),
