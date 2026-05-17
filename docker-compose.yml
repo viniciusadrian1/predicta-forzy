@@ -1,0 +1,156 @@
+# Forzy Digital Twin - stack de desenvolvimento completa.
+# Subir: docker compose up -d --build
+name: forzy-digital-twin
+
+services:
+  # ----------------------------------------------------------------
+  # Persistencia: catalogo relacional (ativos, usuarios, auditoria)
+  # ----------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: forzy-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-forzy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forzy_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-forzy_catalog}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Persistencia: series temporais (telemetria dos sensores)
+  # ----------------------------------------------------------------
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: forzy-timescaledb
+    environment:
+      POSTGRES_USER: ${TIMESCALE_USER:-forzy}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-forzy_dev_password}
+      POSTGRES_DB: ${TIMESCALE_DB:-forzy_timeseries}
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Cache / pub-sub
+  # ----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: forzy-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Vector store para RAG (usado a partir da Sprint 4)
+  # ----------------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: forzy-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Broker MQTT (gateway edge -> nuvem)
+  # ----------------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: forzy-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Simulador OPC-UA do motor MTR-001
+  # ----------------------------------------------------------------
+  opcua-simulator:
+    build:
+      context: ./edge/opcua_simulator
+    container_name: forzy-opcua-simulator
+    environment:
+      OPCUA_HOST: 0.0.0.0
+      OPCUA_PORT: "4840"
+      OPCUA_NAMESPACE_URI: ${OPCUA_NAMESPACE_URI:-http://forzy.promon/opcua/}
+    ports:
+      - "4840:4840"
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # API / BFF
+  # ----------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+    container_name: forzy-backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      TIMESCALE_HOST: timescaledb
+      REDIS_HOST: redis
+      MQTT_HOST: mosquitto
+      CHROMA_HOST: chromadb
+      OPCUA_ENDPOINT: opc.tcp://opcua-simulator:4840/forzy/server/
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      opcua-simulator:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Frontend Next.js
+  # ----------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+    container_name: forzy-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_V1_PREFIX: /api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  timescale_data:
+  chroma_data:

@@ -1,0 +1,69 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# === Node / Next.js ===
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.vercel/
+playwright-report/
+test-results/
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
+
+# === ML artifacts ===
+ml/models/*.pkl
+ml/models/*.pt
+ml/models/*.joblib
+ml/data/raw/*
+ml/data/processed/*
+ml/data/synthetic/*
+!ml/data/**/.gitkeep
+!ml/models/.gitkeep
+mlruns/
+
+# === RAG vector store ===
+rag/.chroma/
+chroma_data/
+
+# === Logs ===
+*.log
+logs/
+
+# === IDE / OS ===
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Misc ===
+.cache/
+tmp/
+*.pid
