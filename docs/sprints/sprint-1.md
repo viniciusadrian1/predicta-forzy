@@ -104,7 +104,7 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.scripts.seed
 
 # 3. Abrir o frontend
-#    http://localhost:3000  -> dashboard com o motor MTR-001
+#    http://localhost:3001  -> dashboard com o motor MTR-001
 #    Clicar no card  -> /asset/MTR-001
 #    Observar o grafico de temperatura subir nos primeiros ~60 s.
 

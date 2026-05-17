@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # --- TimescaleDB (series temporais) ---
     timescale_host: str = "localhost"
-    timescale_port: int = 5433
+    timescale_port: int = 5434
     timescale_user: str = "forzy"
     timescale_password: str = "forzy_dev_password"
     timescale_db: str = "forzy_timeseries"
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
     # --- LLM ---
     llm_provider: str = "anthropic"

@@ -35,7 +35,7 @@ services:
       POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-forzy_dev_password}
       POSTGRES_DB: ${TIMESCALE_DB:-forzy_timeseries}
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
@@ -114,6 +114,7 @@ services:
       MQTT_HOST: mosquitto
       CHROMA_HOST: chromadb
       OPCUA_ENDPOINT: opc.tcp://opcua-simulator:4840/forzy/server/
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
     ports:
       - "8000:8000"
     depends_on:
@@ -144,7 +145,7 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_V1_PREFIX: /api/v1
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       backend:
         condition: service_healthy

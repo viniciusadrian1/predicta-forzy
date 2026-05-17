@@ -84,12 +84,12 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.scripts.seed
 
 # 6. Acessar:
-#    Frontend ......... http://localhost:3000
+#    Frontend ......... http://localhost:3001
 #    API (Swagger) .... http://localhost:8000/docs
 #    OPC-UA ........... opc.tcp://localhost:4840/forzy/server/
 ```
 
-Após ~1 minuto, a tela `http://localhost:3000/asset/MTR-001` exibe o gráfico de
+Após ~1 minuto, a tela `http://localhost:3001/asset/MTR-001` exibe o gráfico de
 temperatura atualizando em tempo real.
 
 ## Estrutura
