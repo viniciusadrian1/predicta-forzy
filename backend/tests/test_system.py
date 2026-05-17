@@ -1,4 +1,15 @@
-"""Testes dos endpoints de sistema: health, autenticacao e visao (stub)."""
+"""Testes dos endpoints de sistema: health, autenticacao e visao (OCR)."""
+
+import io
+
+from PIL import Image
+
+
+def _png_bytes() -> bytes:
+    """Gera os bytes de um PNG valido minimo."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (160, 90), color="white").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 async def test_health(client):
@@ -26,12 +37,20 @@ async def test_login_invalid_credentials(client):
     assert response.status_code == 401
 
 
-async def test_vision_extract_stub(client):
+async def test_vision_extract_from_image(client):
     response = await client.post(
         "/api/v1/assets/extract-from-image",
-        files={"file": ("placa.jpg", b"conteudo-de-imagem-falso", "image/jpeg")},
+        files={"file": ("placa.png", _png_bytes(), "image/png")},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["engine"] == "stub"
+    assert body["engine"] in {"stub", "paddleocr"}
     assert len(body["fields"]) > 0
+
+
+async def test_vision_rejects_invalid_image(client):
+    response = await client.post(
+        "/api/v1/assets/extract-from-image",
+        files={"file": ("nao-imagem.txt", b"isto nao e uma imagem", "text/plain")},
+    )
+    assert response.status_code == 400

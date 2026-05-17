@@ -2,11 +2,17 @@
 
 import os
 
-# Configurado antes de importar a aplicacao: desliga a escrita de auditoria
-# (que usa o banco real) para isolar os testes.
-os.environ.setdefault("FEATURE_GOVERNANCE", "false")
+# Configurado antes de importar a aplicacao. As feature flags sao fixadas
+# aqui para que os testes nao dependam de um arquivo .env do ambiente; a
+# auditoria fica desligada para isolar os testes do banco real.
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
+os.environ.setdefault("FEATURE_AUTH", "true")
+os.environ.setdefault("FEATURE_ASSETS", "true")
+os.environ.setdefault("FEATURE_TELEMETRY", "true")
+os.environ.setdefault("FEATURE_VISION", "true")
+os.environ.setdefault("FEATURE_AUTOMATION", "true")
+os.environ.setdefault("FEATURE_GOVERNANCE", "false")
 
 from collections.abc import AsyncGenerator  # noqa: E402
 
