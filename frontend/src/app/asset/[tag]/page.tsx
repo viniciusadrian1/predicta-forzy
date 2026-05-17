@@ -5,35 +5,42 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { Header } from "@/components/Header";
-import { SensorStrip } from "@/components/SensorStrip";
+import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { TelemetryChart } from "@/components/TelemetryChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAsset, getLatest, getTelemetry } from "@/lib/api";
+import { getAsset } from "@/lib/api";
 
 interface AssetPageProps {
   params: { tag: string };
 }
 
+const SENSORS = [
+  { variable: "Tensao", label: "Tensao", unit: "V", color: "#38bdf8" },
+  { variable: "Corrente", label: "Corrente", unit: "A", color: "#22d3ee" },
+  { variable: "Temperatura", label: "Temperatura", unit: "C", color: "#f59e0b" },
+  { variable: "Rotacao", label: "Rotacao", unit: "RPM", color: "#a78bfa" },
+  {
+    variable: "Vibracao_Velocidade_RMS",
+    label: "Vibracao (velocidade)",
+    unit: "mm/s",
+    color: "#34d399",
+  },
+  {
+    variable: "Vibracao_Aceleracao_RMS",
+    label: "Vibracao (aceleracao)",
+    unit: "g",
+    color: "#f472b6",
+  },
+];
+
 export default function AssetPage({ params }: AssetPageProps) {
   const { tag } = params;
-
   const assetQuery = useQuery({
     queryKey: ["asset", tag],
     queryFn: () => getAsset(tag),
   });
-  const latestQuery = useQuery({
-    queryKey: ["latest", tag],
-    queryFn: () => getLatest(tag),
-    refetchInterval: 2500,
-  });
-  const temperatureQuery = useQuery({
-    queryKey: ["telemetry", tag, "Temperatura"],
-    queryFn: () => getTelemetry(tag, "Temperatura", 600),
-    refetchInterval: 3000,
-  });
-
   const asset = assetQuery.data;
+
   const specs: { label: string; value: string | number | null }[] = asset
     ? [
         { label: "Fabricante", value: asset.manufacturer },
@@ -61,13 +68,9 @@ export default function AssetPage({ params }: AssetPageProps) {
           Voltar para o painel
         </Link>
 
-        {assetQuery.isLoading && (
-          <p className="text-slate-400">Carregando ativo...</p>
-        )}
+        {assetQuery.isLoading && <p className="text-slate-400">Carregando ativo...</p>}
         {assetQuery.isError && (
-          <p className="text-red-400">
-            Ativo nao encontrado ou API indisponivel.
-          </p>
+          <p className="text-red-400">Ativo nao encontrado ou API indisponivel.</p>
         )}
 
         {asset && (
@@ -80,45 +83,37 @@ export default function AssetPage({ params }: AssetPageProps) {
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Leituras atuais
+                Telemetria em tempo real
               </h2>
-              <SensorStrip readings={latestQuery.data?.readings ?? []} />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {SENSORS.map((sensor) => (
+                  <SensorPanel
+                    key={sensor.variable}
+                    tag={asset.tag}
+                    variable={sensor.variable}
+                    label={sensor.label}
+                    unit={sensor.unit}
+                    color={sensor.color}
+                  />
+                ))}
+              </div>
             </section>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Temperatura em tempo real</CardTitle>
-                  <p className="text-sm text-slate-400">
-                    Atualizacao automatica a cada 3 segundos
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <TelemetryChart
-                    points={temperatureQuery.data?.points ?? []}
-                    unit="C"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Especificacoes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="flex flex-col gap-2 text-sm">
-                    {specs.map((row) => (
-                      <div key={row.label} className="flex justify-between gap-4">
-                        <dt className="text-slate-400">{row.label}</dt>
-                        <dd className="text-right text-slate-200">
-                          {row.value ?? "--"}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Especificacoes do ativo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  {specs.map((row) => (
+                    <div key={row.label} className="flex justify-between gap-4">
+                      <dt className="text-slate-400">{row.label}</dt>
+                      <dd className="text-right text-slate-200">{row.value ?? "--"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
           </>
         )}
       </main>

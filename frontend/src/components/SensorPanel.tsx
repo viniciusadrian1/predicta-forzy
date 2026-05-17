@@ -1,0 +1,141 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronUp, Download } from "lucide-react";
+import { useState } from "react";
+
+import { TelemetryChart } from "@/components/TelemetryChart";
+import { Card } from "@/components/ui/card";
+import { getTelemetry, telemetryCsvUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import type { TelemetryPoint } from "@/types";
+
+const WINDOWS = [
+  { key: "1h", label: "1h", hours: 1 },
+  { key: "24h", label: "24h", hours: 24 },
+  { key: "7d", label: "7d", hours: 24 * 7 },
+  { key: "30d", label: "30d", hours: 24 * 30 },
+];
+
+function Sparkline({ points, color }: { points: TelemetryPoint[]; color: string }) {
+  if (points.length < 2) {
+    return <div className="mt-2 h-10" />;
+  }
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const width = 100;
+  const height = 36;
+  const path = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / span) * height;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="mt-2 h-10 w-full"
+      preserveAspectRatio="none"
+    >
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+interface SensorPanelProps {
+  tag: string;
+  variable: string;
+  label: string;
+  unit: string;
+  color: string;
+}
+
+export function SensorPanel({ tag, variable, label, unit, color }: SensorPanelProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [windowKey, setWindowKey] = useState("1h");
+  const win = WINDOWS.find((item) => item.key === windowKey) ?? WINDOWS[0];
+
+  const query = useQuery({
+    queryKey: ["sensor", tag, variable, expanded, windowKey],
+    queryFn: () => {
+      if (!expanded) {
+        return getTelemetry(tag, variable, { limit: 60 });
+      }
+      const to = new Date();
+      const from = new Date(to.getTime() - win.hours * 3_600_000);
+      return getTelemetry(tag, variable, {
+        from: from.toISOString(),
+        to: to.toISOString(),
+        limit: 1000,
+      });
+    },
+    refetchInterval: 4000,
+  });
+
+  const points = query.data?.points ?? [];
+  const current = points.length > 0 ? points[points.length - 1] : null;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-slate-400">{label}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-100">
+            {current ? current.value.toLocaleString("pt-BR") : "--"}
+            <span className="ml-1 text-sm font-normal text-slate-500">{unit}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          className="text-slate-400 hover:text-slate-200"
+          aria-label={expanded ? "Recolher" : "Expandir"}
+        >
+          {expanded ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
+        </button>
+      </div>
+
+      {!expanded && <Sparkline points={points} color={color} />}
+
+      {expanded && (
+        <div className="mt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex gap-1">
+              {WINDOWS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setWindowKey(item.key)}
+                  className={cn(
+                    "rounded px-2 py-1 text-xs transition-colors",
+                    windowKey === item.key
+                      ? "bg-cyan-500 text-slate-950"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <a
+              href={telemetryCsvUrl(tag, variable)}
+              download
+              className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+            >
+              <Download className="h-3.5 w-3.5" />
+              CSV
+            </a>
+          </div>
+          <TelemetryChart points={points} unit={unit} color={color} />
+        </div>
+      )}
+    </Card>
+  );
+}
