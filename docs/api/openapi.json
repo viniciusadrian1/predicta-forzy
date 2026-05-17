@@ -1,0 +1,2073 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Forzy Digital Twin",
+    "description": "Plataforma de Digital Twin para monitoramento e manutencao preditiva de motores eletricos industriais.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "description": "Autentica um usuario e devolve um token JWT de acesso.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "description": "Devolve o usuario corrente, resolvido a partir do token Bearer.",
+        "operationId": "me_api_v1_auth_me_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List Assets",
+        "operationId": "list_assets_api_v1_assets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssetOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Assets Api V1 Assets Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Create Asset",
+        "operationId": "create_asset_api_v1_assets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{tag}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Get Asset",
+        "operationId": "get_asset_api_v1_assets__tag__get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Update Asset",
+        "operationId": "update_asset_api_v1_assets__tag__patch",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Delete Asset",
+        "operationId": "delete_asset_api_v1_assets__tag__delete",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plants": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List Plants",
+        "operationId": "list_plants_api_v1_plants_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlantOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Plants Api V1 Plants Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Create Plant",
+        "operationId": "create_plant_api_v1_plants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlantIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/areas": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List Areas",
+        "operationId": "list_areas_api_v1_areas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AreaOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Areas Api V1 Areas Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Create Area",
+        "operationId": "create_area_api_v1_areas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AreaIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Query Telemetry",
+        "description": "Consulta historica de uma serie temporal.",
+        "operationId": "query_telemetry_api_v1_telemetry_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "TAG do ativo",
+              "title": "Tag"
+            },
+            "description": "TAG do ativo"
+          },
+          {
+            "name": "variable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Variavel; vazio = todas",
+              "title": "Variable"
+            },
+            "description": "Variavel; vazio = todas"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 1000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetrySeriesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry/{tag}/latest": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Latest Telemetry",
+        "description": "Snapshot com a ultima leitura de cada variavel do ativo.",
+        "operationId": "latest_telemetry_api_v1_telemetry__tag__latest_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry/stream": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "Stream Telemetry",
+        "description": "Stream SSE com os eventos de telemetria em tempo real.",
+        "operationId": "stream_telemetry_api_v1_telemetry_stream_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtra por TAG do ativo",
+              "title": "Tag"
+            },
+            "description": "Filtra por TAG do ativo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/extract-from-image": {
+      "post": {
+        "tags": [
+          "vision"
+        ],
+        "summary": "Extract From Image",
+        "description": "Extrai os dados da placa de identificacao de um ativo a partir de uma imagem.",
+        "operationId": "extract_from_image_api_v1_assets_extract_from_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_from_image_api_v1_assets_extract_from_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NameplateExtractionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit": {
+      "get": {
+        "tags": [
+          "governance"
+        ],
+        "summary": "List Audit",
+        "description": "Lista os registros de auditoria mais recentes.",
+        "operationId": "list_audit_api_v1_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntryOut"
+                  },
+                  "title": "Response List Audit Api V1 Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AreaIn": {
+        "properties": {
+          "plant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plant Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plant_id",
+          "name",
+          "code"
+        ],
+        "title": "AreaIn"
+      },
+      "AreaOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "plant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "plant_id",
+          "name",
+          "code",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AreaOut"
+      },
+      "AssetIn": {
+        "properties": {
+          "asset_type": {
+            "type": "string",
+            "title": "Asset Type",
+            "default": "motor"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial Number"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          },
+          "nominal_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Current A"
+          },
+          "nominal_rpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Rpm"
+          },
+          "connection_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Type"
+          },
+          "insulation_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insulation Class"
+          },
+          "ip_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Rating"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "manufacture_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacture Date"
+          },
+          "plant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plant Id"
+          },
+          "area_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          },
+          "datasheet_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datasheet Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "unknown"
+          },
+          "tag": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag"
+        ],
+        "title": "AssetIn",
+        "description": "Payload de criacao de ativo."
+      },
+      "AssetOut": {
+        "properties": {
+          "asset_type": {
+            "type": "string",
+            "title": "Asset Type",
+            "default": "motor"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial Number"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          },
+          "nominal_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Current A"
+          },
+          "nominal_rpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Rpm"
+          },
+          "connection_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Type"
+          },
+          "insulation_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insulation Class"
+          },
+          "ip_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Rating"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "manufacture_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacture Date"
+          },
+          "plant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plant Id"
+          },
+          "area_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          },
+          "datasheet_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datasheet Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "unknown"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tag",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AssetOut"
+      },
+      "AssetUpdate": {
+        "properties": {
+          "asset_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Type"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial Number"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          },
+          "nominal_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Current A"
+          },
+          "nominal_rpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Rpm"
+          },
+          "connection_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Type"
+          },
+          "insulation_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insulation Class"
+          },
+          "ip_rating": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Rating"
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
+          },
+          "manufacture_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacture Date"
+          },
+          "plant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plant Id"
+          },
+          "area_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "position_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position X"
+          },
+          "position_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Y"
+          },
+          "datasheet_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datasheet Url"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "AssetUpdate",
+        "description": "Payload de atualizacao parcial (PATCH) - todos os campos opcionais."
+      },
+      "AuditEntryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "ip_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "actor",
+          "action",
+          "resource_type",
+          "resource_id",
+          "method",
+          "path",
+          "status_code",
+          "ip_address"
+        ],
+        "title": "AuditEntryOut",
+        "description": "Registro de auditoria exposto pela API."
+      },
+      "Body_extract_from_image_api_v1_assets_extract_from_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_from_image_api_v1_assets_extract_from_image_post"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "project",
+          "environment",
+          "version"
+        ],
+        "title": "HealthResponse",
+        "description": "Resposta do endpoint de healthcheck."
+      },
+      "LatestOut": {
+        "properties": {
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/LatestReading"
+            },
+            "type": "array",
+            "title": "Readings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_tag",
+          "readings"
+        ],
+        "title": "LatestOut",
+        "description": "Snapshot com a ultima leitura de cada variavel do ativo."
+      },
+      "LatestReading": {
+        "properties": {
+          "variable": {
+            "type": "string",
+            "title": "Variable"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "quality": {
+            "type": "integer",
+            "title": "Quality"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variable",
+          "value",
+          "unit",
+          "quality",
+          "time"
+        ],
+        "title": "LatestReading",
+        "description": "Valor instantaneo mais recente de uma variavel."
+      },
+      "LoginIn": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginIn"
+      },
+      "NameplateExtractionOut": {
+        "properties": {
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/NameplateField"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "size_bytes",
+          "engine",
+          "fields",
+          "note"
+        ],
+        "title": "NameplateExtractionOut",
+        "description": "Resultado da extracao OCR de uma placa de identificacao."
+      },
+      "NameplateField": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label",
+          "value",
+          "confidence"
+        ],
+        "title": "NameplateField",
+        "description": "Um campo extraido da placa de identificacao, com confianca."
+      },
+      "PlantIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "code"
+        ],
+        "title": "PlantIn"
+      },
+      "PlantOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "code",
+          "location",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlantOut"
+      },
+      "TelemetryPoint": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Time"
+          },
+          "variable": {
+            "type": "string",
+            "title": "Variable"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "quality": {
+            "type": "integer",
+            "title": "Quality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "variable",
+          "value",
+          "unit",
+          "quality"
+        ],
+        "title": "TelemetryPoint",
+        "description": "Um ponto de uma serie temporal."
+      },
+      "TelemetrySeriesOut": {
+        "properties": {
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag"
+          },
+          "variable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variable"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TelemetryPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_tag",
+          "variable",
+          "count",
+          "points"
+        ],
+        "title": "TelemetrySeriesOut",
+        "description": "Resposta da consulta de serie temporal."
+      },
+      "TokenOut": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "username",
+          "role"
+        ],
+        "title": "TokenOut"
+      },
+      "UserOut": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "role"
+        ],
+        "title": "UserOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
