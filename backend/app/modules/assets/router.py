@@ -110,7 +110,11 @@ async def update_asset(
 
 
 @router.delete("/assets/{tag}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_asset(tag: str, service: AssetService = Depends(get_asset_service)) -> None:
+async def delete_asset(
+    tag: str, service: AssetService = Depends(get_asset_service)
+) -> Response:
+    # 204 nao tem corpo: devolvemos Response explicito (sem response_model)
+    # para compatibilidade com as versoes recentes do FastAPI.
     try:
         await service.delete_asset(tag)
     except AssetNotFoundError as exc:
@@ -118,6 +122,7 @@ async def delete_asset(tag: str, service: AssetService = Depends(get_asset_servi
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Ativo '{tag}' nao encontrado",
         ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ----------------------------- Plants -----------------------------
