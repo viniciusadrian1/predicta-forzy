@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
-import { Header } from "@/components/Header";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -72,9 +72,7 @@ function AlertsPageInner() {
   const ackingId = ackMutation.isPending ? ackMutation.variables?.id : null;
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
+    <AppShell>
         <div className="mb-1 flex items-baseline justify-between">
           <h1 className="text-xl font-semibold text-slate-100">Alertas</h1>
           <span className="text-sm text-slate-400">
@@ -196,8 +194,7 @@ function AlertsPageInner() {
             </Card>
           ))}
         </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

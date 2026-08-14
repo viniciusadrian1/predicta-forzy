@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download, ServerCrash } from "lucide-react";
 
+import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
-import { Header } from "@/components/Header";
 import { PlantMap } from "@/components/PlantMap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,9 +36,7 @@ export default function PlantPage({ params }: PlantPageProps) {
   );
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
+    <AppShell>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-100">
@@ -89,7 +87,6 @@ export default function PlantPage({ params }: PlantPageProps) {
             <span className="text-slate-500">&#9679;</span> Desconhecido
           </span>
         </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

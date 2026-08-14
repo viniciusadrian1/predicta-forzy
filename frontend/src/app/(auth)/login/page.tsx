@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   // Já autenticado -> direto ao painel.
   useEffect(() => {
-    if (token) router.replace("/dashboard");
+    if (token) router.replace("/overview");
   }, [token, router]);
 
   const { register, handleSubmit, formState } = useForm<LoginValues>({
@@ -46,7 +46,7 @@ export default function LoginPage() {
     try {
       const auth = await login(values.username, values.password);
       setAuth(auth);
-      router.push("/dashboard");
+      router.push("/overview");
     } catch (error) {
       setServerError(error instanceof Error ? error.message : "Falha no login");
     }

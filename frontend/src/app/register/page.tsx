@@ -4,7 +4,7 @@ import { ArrowRight, Camera } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { Header } from "@/components/Header";
+import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,9 +50,8 @@ export default function RegisterPage() {
   const showOpenAsset = Boolean(result && (result.created || result.duplicate) && resultTag);
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto max-w-3xl px-6 py-8">
+    <AppShell>
+      <div className="mx-auto max-w-3xl">
         <h1 className="mb-1 text-xl font-semibold text-slate-100">
           Cadastro por foto da placa
         </h1>
@@ -138,7 +137,7 @@ export default function RegisterPage() {
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

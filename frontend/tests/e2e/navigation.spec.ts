@@ -10,7 +10,7 @@ test("login -> planta -> ativo -> telemetria", async ({ page }) => {
   await page.getByLabel("Usuário").fill("admin");
   await page.getByLabel("Senha").fill("admin123");
   await page.getByRole("button", { name: /Entrar/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/overview/);
 
   // 2. Abrir a planta baixa pela árvore de hierarquia
   await page
@@ -39,7 +39,7 @@ test("alerta -> ativo em um clique", async ({ page }) => {
   await page.getByLabel("Usuário").fill("admin");
   await page.getByLabel("Senha").fill("admin123");
   await page.getByRole("button", { name: /Entrar/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/overview/);
 
   await page.goto("/alerts");
   const assetLink = page.getByRole("link", { name: /MTR-001/ }).first();

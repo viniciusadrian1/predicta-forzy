@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { AppShell } from "@/components/AppShell";
 import { ChatPanel } from "@/components/ChatPanel";
-import { Header } from "@/components/Header";
 import { Card } from "@/components/ui/card";
 import { getRagStatus } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -18,9 +18,8 @@ export default function ChatPage() {
   const status = statusQuery.data;
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto max-w-4xl px-6 py-8">
+    <AppShell>
+      <div className="mx-auto max-w-4xl">
         <h1 className="text-xl font-semibold text-slate-100">
           Assistente de Troubleshooting
         </h1>
@@ -46,7 +45,7 @@ export default function ChatPage() {
         <Card className="mt-5 h-[70vh] overflow-hidden p-0">
           <ChatPanel className="h-full" />
         </Card>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

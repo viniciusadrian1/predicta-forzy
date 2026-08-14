@@ -2,12 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, SearchX, ServerCrash } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AppShell } from "@/components/AppShell";
 import { AssetHealth } from "@/components/AssetHealth";
 import { ChatWidget } from "@/components/ChatWidget";
 import { EmptyState } from "@/components/EmptyState";
-import { Header } from "@/components/Header";
+import { NextAction } from "@/components/NextAction";
 import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +57,7 @@ export default function AssetPage({ params }: AssetPageProps) {
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
-    else router.push("/dashboard");
+    else router.push("/overview");
   };
 
   const specs: { label: string; value: string | number | null }[] = asset
@@ -74,17 +76,22 @@ export default function AssetPage({ params }: AssetPageProps) {
     : [];
 
   return (
-    <div>
-      <Header />
-      <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
-        <button
-          type="button"
-          onClick={goBack}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </button>
+    <AppShell>
+      <p className="mb-1 text-xs text-slate-500">
+        <Link href="/assets" className="hover:text-slate-300">
+          Ativos
+        </Link>
+        {" / "}
+        <span className="text-slate-400">{tag}</span>
+      </p>
+      <button
+        type="button"
+        onClick={goBack}
+        className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar
+      </button>
 
         {assetQuery.isLoading && (
           <>
@@ -104,7 +111,7 @@ export default function AssetPage({ params }: AssetPageProps) {
               title={`Ativo "${tag}" não encontrado`}
               description="Verifique a TAG ou volte ao painel de ativos."
               action={
-                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                <Button variant="outline" onClick={() => router.push("/overview")}>
                   Voltar para o painel
                 </Button>
               }
@@ -124,11 +131,13 @@ export default function AssetPage({ params }: AssetPageProps) {
 
         {asset && (
           <>
-            <div className="mb-6 flex flex-wrap items-center gap-3">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-slate-100">{asset.tag}</h1>
               <StatusBadge status={asset.status} />
               <span className="text-slate-400">{asset.name}</span>
             </div>
+
+            <NextAction tag={asset.tag} />
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -169,7 +178,6 @@ export default function AssetPage({ params }: AssetPageProps) {
             <ChatWidget assetTag={asset.tag} />
           </>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
