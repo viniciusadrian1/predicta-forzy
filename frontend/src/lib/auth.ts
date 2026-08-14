@@ -26,6 +26,19 @@ export const useAuth = create<AuthState>()(
         }),
       logout: () => set({ token: null, username: null, role: null }),
     }),
-    { name: "forzy-auth" },
+    { name: "predicta-auth" },
   ),
 );
+
+// Hierarquia de papeis - espelho de backend/app/core/rbac.py.
+const ROLE_LEVEL: Record<string, number> = {
+  viewer: 0,
+  operator: 1,
+  engineer: 2,
+  admin: 3,
+};
+
+/** Indica se `role` satisfaz o papel minimo `minimum` (null = viewer). */
+export function hasRole(role: string | null, minimum: keyof typeof ROLE_LEVEL): boolean {
+  return (ROLE_LEVEL[role ?? "viewer"] ?? 0) >= ROLE_LEVEL[minimum];
+}

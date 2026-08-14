@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { getAlerts } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { type ToastSeverity, useToasts } from "@/lib/toast";
 
 function toSeverity(value: string): ToastSeverity {
@@ -18,6 +19,7 @@ function toSeverity(value: string): ToastSeverity {
  */
 export function AlertWatcher() {
   const push = useToasts((state) => state.push);
+  const token = useAuth((state) => state.token);
   const seen = useRef<Set<string>>(new Set());
   const initialized = useRef(false);
 
@@ -25,6 +27,8 @@ export function AlertWatcher() {
     queryKey: ["alerts", "watch"],
     queryFn: () => getAlerts({ onlyActive: true }),
     refetchInterval: 10000,
+    // Silencioso sem sessão (senão a tela de login recebe toasts de alerta).
+    enabled: !!token,
   });
 
   useEffect(() => {
@@ -41,6 +45,7 @@ export function AlertWatcher() {
         title: `${alert.severity}: ${alert.alert_type}`,
         description: alert.message,
         severity: toSeverity(alert.severity),
+        href: `/asset/${alert.asset_tag}`,
       });
     }
   }, [data, push]);

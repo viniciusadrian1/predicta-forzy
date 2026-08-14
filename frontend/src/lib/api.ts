@@ -29,6 +29,16 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** Erro de API com o status HTTP — permite distinguir 401/404/500 na UI. */
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = response.statusText;
@@ -38,7 +48,13 @@ async function parse<T>(response: Response): Promise<T> {
     } catch {
       // resposta sem corpo JSON
     }
-    throw new Error(detail);
+    // Sessão expirada: derruba o estado local e volta ao login. A condição
+    // de token evita loop no próprio login (senha errada também retorna 401).
+    if (response.status === 401 && useAuth.getState().token) {
+      useAuth.getState().logout();
+      window.location.assign("/login?expired=1");
+    }
+    throw new ApiError(detail, response.status);
   }
   return (await response.json()) as T;
 }
@@ -50,6 +66,13 @@ export async function login(username: string, password: string): Promise<AuthTok
     body: JSON.stringify({ username, password }),
   });
   return parse<AuthToken>(response);
+}
+
+/** Valida a sessão persistida contra a API (token expirado cai no 401 global). */
+export async function getMe(): Promise<{ username: string; role: string }> {
+  return parse(
+    await fetch(apiUrl("/auth/me"), { headers: authHeaders(), cache: "no-store" }),
+  );
 }
 
 export interface AssetFilters {

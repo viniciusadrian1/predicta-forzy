@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -13,7 +13,7 @@ import { login } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const loginSchema = z.object({
-  username: z.string().min(1, "Informe o usuario"),
+  username: z.string().min(1, "Informe o usuário"),
   password: z.string().min(1, "Informe a senha"),
 });
 
@@ -22,18 +22,30 @@ type LoginValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuth((s) => s.setAuth);
+  const token = useAuth((s) => s.token);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+
+  // ?expired=1 vem do handler global de 401 (sessão de 15 min vencida).
+  // Lido via window para não exigir <Suspense> de useSearchParams no build.
+  useEffect(() => {
+    setExpired(new URLSearchParams(window.location.search).has("expired"));
+  }, []);
+
+  // Já autenticado -> direto ao painel.
+  useEffect(() => {
+    if (token) router.replace("/dashboard");
+  }, [token, router]);
 
   const { register, handleSubmit, formState } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "admin", password: "admin123" },
   });
 
   const onSubmit = async (values: LoginValues) => {
     setServerError(null);
     try {
-      const token = await login(values.username, values.password);
-      setAuth(token);
+      const auth = await login(values.username, values.password);
+      setAuth(auth);
       router.push("/dashboard");
     } catch (error) {
       setServerError(error instanceof Error ? error.message : "Falha no login");
@@ -50,6 +62,11 @@ export default function LoginPage() {
           </p>
         </CardHeader>
         <CardContent>
+          {expired && (
+            <p className="mb-3 rounded-md border border-amber-600/40 bg-amber-950/50 px-3 py-2 text-xs text-amber-300">
+              Sessão expirada — entre novamente.
+            </p>
+          )}
           <form
             onSubmit={handleSubmit(onSubmit)}
             className="flex flex-col gap-3"
@@ -57,7 +74,7 @@ export default function LoginPage() {
           >
             <div>
               <label htmlFor="username" className="text-xs text-slate-400">
-                Usuario
+                Usuário
               </label>
               <Input id="username" autoComplete="username" {...register("username")} />
               {formState.errors.username && (
@@ -86,8 +103,8 @@ export default function LoginPage() {
             <Button type="submit" disabled={formState.isSubmitting}>
               {formState.isSubmitting ? "Entrando..." : "Entrar"}
             </Button>
-            <p className="text-center text-xs text-slate-500">
-              Demonstracao: admin / admin123
+            <p className="text-center text-xs text-slate-600">
+              Ambiente de demonstração — admin / admin123
             </p>
           </form>
         </CardContent>
