@@ -29,6 +29,7 @@ from app.modules.governance.middleware import AuditMiddleware
 from app.modules.governance.router import router as governance_router
 from app.modules.ml.router import router as ml_router
 from app.modules.rag.router import router as rag_router
+from app.modules.telemetry.external import ExternalSensorsService
 from app.modules.telemetry.ingestion import TelemetryIngestionService
 from app.modules.telemetry.router import router as telemetry_router
 from app.modules.vision.router import router as vision_router
@@ -53,9 +54,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             await asyncio.sleep(3.0)
 
     ingestion: TelemetryIngestionService | None = None
+    external: ExternalSensorsService | None = None
     if settings.feature_telemetry:
         ingestion = TelemetryIngestionService(settings)
         ingestion.start()
+        # Sensores fisicos Forzy (API HTTP): ativos apenas com URL configurada.
+        if settings.external_sensors_base_url:
+            external = ExternalSensorsService(settings)
+            external.start()
     if settings.feature_alerts:
         alerts_evaluator.start()
 
@@ -63,6 +69,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     if ingestion is not None:
         await ingestion.stop()
+    if external is not None:
+        await external.stop()
     if settings.feature_alerts:
         await alerts_evaluator.stop()
 

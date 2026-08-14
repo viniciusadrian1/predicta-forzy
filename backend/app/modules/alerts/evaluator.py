@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.infra.db.base import catalog_session_factory, timeseries_session_factory
 from app.modules.alerts.models import Alert
 from app.modules.alerts.repository import AlertRepository
@@ -62,13 +63,19 @@ class AlertsEvaluator:
             self._task = None
 
     async def _run_forever(self) -> None:
+        # Lista de ativos monitorados vem da configuracao (inclui os sensores
+        # fisicos Forzy, alem do simulador).
+        tags = [
+            tag.strip() for tag in get_settings().monitored_asset_tags.split(",") if tag.strip()
+        ] or [MONITORED_ASSET_TAG]
         while self._running:
-            try:
-                await self.evaluate(MONITORED_ASSET_TAG)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.exception("Falha na avaliacao de alertas")
+            for tag in tags:
+                try:
+                    await self.evaluate(tag)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Falha na avaliacao de alertas (%s)", tag)
             await asyncio.sleep(EVALUATION_INTERVAL_S)
 
     async def evaluate(self, asset_tag: str) -> list[Alert]:

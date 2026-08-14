@@ -110,9 +110,7 @@ async def update_asset(
 
 
 @router.delete("/assets/{tag}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_asset(
-    tag: str, service: AssetService = Depends(get_asset_service)
-) -> Response:
+async def delete_asset(tag: str, service: AssetService = Depends(get_asset_service)) -> Response:
     # 204 nao tem corpo: devolvemos Response explicito (sem response_model)
     # para compatibilidade com as versoes recentes do FastAPI.
     try:

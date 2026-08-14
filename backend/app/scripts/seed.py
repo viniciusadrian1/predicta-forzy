@@ -84,6 +84,31 @@ async def seed() -> None:
             session.add(asset)
             logger.info("Ativo criado: %s", asset.tag)
 
+        # Sensores fisicos da Forzy (S1/S2) - alimentados pela API HTTP externa.
+        for tag, sensor_name, pos_x in (
+            ("MTR-F01", "Motor físico Forzy — sensor S1", 0.32),
+            ("MTR-F02", "Motor físico Forzy — sensor S2", 0.68),
+        ):
+            existing = (
+                await session.execute(select(Asset).where(Asset.tag == tag))
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(
+                    Asset(
+                        tag=tag,
+                        asset_type="motor",
+                        name=sensor_name,
+                        manufacturer="Forzy",
+                        voltage_v=220.0,
+                        plant_id=plant.id,
+                        area_id=area.id,
+                        position_x=pos_x,
+                        position_y=0.68,
+                        status="unknown",
+                    )
+                )
+                logger.info("Ativo criado: %s", tag)
+
         for username, password, role, full_name in _SEED_USERS:
             user = (
                 await session.execute(select(User).where(User.username == username))

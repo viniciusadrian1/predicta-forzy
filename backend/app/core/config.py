@@ -73,6 +73,17 @@ class Settings(BaseSettings):
     # --- RBAC (controle de acesso baseado em papeis) ---
     rbac_enabled: bool = True
 
+    # --- Sensores fisicos Forzy (API HTTP externa) ---
+    # URL do tunel divulgado pela Forzy (efemera - ajustar quando mudar).
+    # Vazio = ingestao externa desabilitada.
+    external_sensors_base_url: str = ""
+    # Mapeamento "TAG:endpoint" separado por virgula.
+    external_sensors_map: str = "MTR-F01:/get_s1,MTR-F02:/get_s2"
+    external_sensors_poll_seconds: float = 30.0
+
+    # --- Alertas: ativos avaliados pelo verificador periodico ---
+    monitored_asset_tags: str = "MTR-001,MTR-F01,MTR-F02"
+
     # --- Feature flags (modularidade) ---
     feature_auth: bool = True
     feature_assets: bool = True
