@@ -16,10 +16,10 @@ export function AssetCard({ asset }: { asset: Asset }) {
           </div>
           <StatusBadge status={asset.status} />
         </div>
-        <p className="mt-2 text-sm text-slate-300">{asset.name ?? "Sem descricao"}</p>
+        <p className="mt-2 text-sm text-slate-300">{asset.name ?? "Sem descrição"}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {[asset.manufacturer, asset.model].filter(Boolean).join(" - ") ||
-            "Fabricante nao informado"}
+          {[asset.manufacturer, asset.model].filter(Boolean).join(" — ") ||
+            "Fabricante não informado"}
         </p>
         {asset.power_kw !== null && (
           <p className="mt-3 text-xs text-slate-400">

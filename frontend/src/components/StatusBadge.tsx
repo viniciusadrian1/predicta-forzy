@@ -1,9 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 
+// Chaves = status da API (não traduzir); valores = rótulo exibido.
 const STATUS_LABELS: Record<string, string> = {
   ok: "Operacional",
-  warning: "Atencao",
-  critical: "Critico",
+  warning: "Atenção",
+  critical: "Crítico",
   unknown: "Desconhecido",
 };
 

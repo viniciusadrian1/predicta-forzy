@@ -6,8 +6,10 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { Header } from "@/components/Header";
 import { Card } from "@/components/ui/card";
 import { getRagStatus } from "@/lib/api";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 export default function ChatPage() {
+  usePageTitle("Assistente");
   const statusQuery = useQuery({
     queryKey: ["rag-status"],
     queryFn: getRagStatus,
@@ -23,7 +25,7 @@ export default function ChatPage() {
           Assistente de Troubleshooting
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Chat com RAG sobre a documentacao tecnica dos motores. As respostas sao
+          Chat com RAG sobre a documentação técnica dos motores. As respostas são
           fundamentadas nos manuais e podem usar a telemetria do ativo.
         </p>
 

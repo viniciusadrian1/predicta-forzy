@@ -15,10 +15,10 @@ interface DisplayMessage {
 }
 
 const SUGGESTIONS = [
-  "Qual o limite de vibracao do motor?",
+  "Qual o limite de vibração do motor?",
   "O que indica desgaste de rolamento?",
   "Como interpretar as zonas da ISO 10816?",
-  "Qual o plano de manutencao recomendado?",
+  "Qual o plano de manutenção recomendado?",
 ];
 
 interface ChatPanelProps {
@@ -81,10 +81,10 @@ export function ChatPanel({ assetTag, className }: ChatPanelProps) {
         },
       );
     } catch {
-      setError("Nao foi possivel falar com o assistente.");
+      setError("Não foi possível falar com o assistente.");
       patchLast({
         content:
-          "Desculpe, nao consegui responder agora. Verifique se a API esta disponivel.",
+          "Desculpe, não consegui responder agora. Verifique se a API está disponível.",
       });
     } finally {
       setStreaming(false);
@@ -101,8 +101,8 @@ export function ChatPanel({ assetTag, className }: ChatPanelProps) {
               Assistente de troubleshooting
             </p>
             <p className="mt-1 max-w-xs text-xs text-slate-500">
-              Pergunte sobre vibracao, falhas, manutencao e a saude dos motores. As
-              respostas citam a documentacao tecnica.
+              Pergunte sobre vibração, falhas, manutenção e a saúde dos motores. As
+              respostas citam a documentação técnica.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((suggestion) => (
@@ -185,7 +185,7 @@ export function ChatPanel({ assetTag, className }: ChatPanelProps) {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder={
-            assetTag ? `Pergunte sobre o ${assetTag}...` : "Faca uma pergunta..."
+            assetTag ? `Pergunte sobre o ${assetTag}...` : "Faça uma pergunta..."
           }
           disabled={streaming}
           className="h-10 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:opacity-50"

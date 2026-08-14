@@ -17,7 +17,7 @@ export function ChatWidget({ assetTag }: ChatWidgetProps) {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[520px] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+        <div className="fixed bottom-24 right-6 z-50 flex h-[min(520px,70dvh)] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-slate-100">

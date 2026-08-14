@@ -16,3 +16,13 @@ body {
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* Foco visível para botões/links nativos (o Button do design system já tem
+   ring próprio via focus-visible:ring). */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+}

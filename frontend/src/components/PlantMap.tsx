@@ -14,8 +14,8 @@ const STATUS_COLOR: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   ok: "Operacional",
-  warning: "Atencao",
-  critical: "Critico",
+  warning: "Atenção",
+  critical: "Crítico",
   unknown: "Desconhecido",
 };
 
@@ -50,10 +50,21 @@ export function PlantMap({ assets }: { assets: Asset[] }) {
           <g
             key={asset.id}
             data-asset-tag={asset.tag}
+            role="link"
+            tabIndex={0}
+            aria-label={`${asset.tag} — ${label}`}
             style={{ cursor: "pointer" }}
             onClick={() => router.push(`/asset/${asset.tag}`)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                router.push(`/asset/${asset.tag}`);
+              }
+            }}
             onMouseEnter={() => setHovered(asset.tag)}
             onMouseLeave={() => setHovered(null)}
+            onFocus={() => setHovered(asset.tag)}
+            onBlur={() => setHovered(null)}
           >
             <title>{`${asset.tag} - ${label}`}</title>
             <circle
