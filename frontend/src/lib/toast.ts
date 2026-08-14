@@ -7,6 +7,8 @@ export interface Toast {
   title: string;
   description?: string;
   severity: ToastSeverity;
+  /** Destino opcional — o toast vira atalho clicável (ex.: /asset/MTR-001). */
+  href?: string;
 }
 
 interface ToastState {
@@ -15,7 +17,7 @@ interface ToastState {
   dismiss: (id: string) => void;
 }
 
-/** Store de notificacoes toast (efemeras, auto-dispensadas em 6 s). */
+/** Store de notificações toast (efêmeras, auto-dispensadas em 6 s). */
 export const useToasts = create<ToastState>((set) => ({
   toasts: [],
   push: (toast) => {

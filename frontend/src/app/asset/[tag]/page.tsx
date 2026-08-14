@@ -1,35 +1,40 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, SearchX, ServerCrash } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { AssetHealth } from "@/components/AssetHealth";
 import { ChatWidget } from "@/components/ChatWidget";
+import { EmptyState } from "@/components/EmptyState";
 import { Header } from "@/components/Header";
 import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAsset } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, getAsset } from "@/lib/api";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 interface AssetPageProps {
   params: { tag: string };
 }
 
+// `variable` são as chaves canônicas da telemetria (OPC-UA) — não traduzir.
 const SENSORS = [
-  { variable: "Tensao", label: "Tensao", unit: "V", color: "#38bdf8" },
+  { variable: "Tensao", label: "Tensão", unit: "V", color: "#38bdf8" },
   { variable: "Corrente", label: "Corrente", unit: "A", color: "#22d3ee" },
   { variable: "Temperatura", label: "Temperatura", unit: "C", color: "#f59e0b" },
-  { variable: "Rotacao", label: "Rotacao", unit: "RPM", color: "#a78bfa" },
+  { variable: "Rotacao", label: "Rotação", unit: "RPM", color: "#a78bfa" },
   {
     variable: "Vibracao_Velocidade_RMS",
-    label: "Vibracao (velocidade)",
+    label: "Vibração (velocidade)",
     unit: "mm/s",
     color: "#34d399",
   },
   {
     variable: "Vibracao_Aceleracao_RMS",
-    label: "Vibracao (aceleracao)",
+    label: "Vibração (aceleração)",
     unit: "g",
     color: "#f472b6",
   },
@@ -37,24 +42,34 @@ const SENSORS = [
 
 export default function AssetPage({ params }: AssetPageProps) {
   const { tag } = params;
+  const router = useRouter();
+  usePageTitle(tag);
+
   const assetQuery = useQuery({
     queryKey: ["asset", tag],
     queryFn: () => getAsset(tag),
   });
   const asset = assetQuery.data;
+  const notFound =
+    assetQuery.error instanceof ApiError && assetQuery.error.status === 404;
+
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push("/dashboard");
+  };
 
   const specs: { label: string; value: string | number | null }[] = asset
     ? [
         { label: "Fabricante", value: asset.manufacturer },
         { label: "Modelo", value: asset.model },
-        { label: "Numero de serie", value: asset.serial_number },
-        { label: "Potencia (kW)", value: asset.power_kw },
-        { label: "Tensao (V)", value: asset.voltage_v },
+        { label: "Número de série", value: asset.serial_number },
+        { label: "Potência (kW)", value: asset.power_kw },
+        { label: "Tensão (V)", value: asset.voltage_v },
         { label: "Corrente nominal (A)", value: asset.nominal_current_a },
-        { label: "Rotacao nominal (RPM)", value: asset.nominal_rpm },
-        { label: "Ligacao", value: asset.connection_type },
+        { label: "Rotação nominal (RPM)", value: asset.nominal_rpm },
+        { label: "Ligação", value: asset.connection_type },
         { label: "Classe de isolamento", value: asset.insulation_class },
-        { label: "Grau de protecao", value: asset.ip_rating },
+        { label: "Grau de proteção", value: asset.ip_rating },
       ]
     : [];
 
@@ -62,18 +77,50 @@ export default function AssetPage({ params }: AssetPageProps) {
     <div>
       <Header />
       <main className="mx-auto max-w-[1536px] px-6 py-8 lg:px-8">
-        <Link
-          href="/dashboard"
+        <button
+          type="button"
+          onClick={goBack}
           className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para o painel
-        </Link>
+          Voltar
+        </button>
 
-        {assetQuery.isLoading && <p className="text-slate-400">Carregando ativo...</p>}
-        {assetQuery.isError && (
-          <p className="text-red-400">Ativo nao encontrado ou API indisponivel.</p>
+        {assetQuery.isLoading && (
+          <>
+            <Skeleton className="mb-6 h-9 w-72" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Skeleton key={index} className="h-32" />
+              ))}
+            </div>
+          </>
         )}
+
+        {assetQuery.isError &&
+          (notFound ? (
+            <EmptyState
+              icon={SearchX}
+              title={`Ativo "${tag}" não encontrado`}
+              description="Verifique a TAG ou volte ao painel de ativos."
+              action={
+                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                  Voltar para o painel
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={ServerCrash}
+              title="API indisponível"
+              description="Não foi possível carregar o ativo. Tente novamente."
+              action={
+                <Button variant="outline" onClick={() => void assetQuery.refetch()}>
+                  Tentar novamente
+                </Button>
+              }
+            />
+          ))}
 
         {asset && (
           <>
@@ -105,7 +152,7 @@ export default function AssetPage({ params }: AssetPageProps) {
 
             <Card>
               <CardHeader>
-                <CardTitle>Especificacoes do ativo</CardTitle>
+                <CardTitle>Especificações do ativo</CardTitle>
               </CardHeader>
               <CardContent>
                 <dl className="grid gap-2 text-sm sm:grid-cols-2">

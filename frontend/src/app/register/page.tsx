@@ -1,6 +1,7 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { ArrowRight, Camera } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Header } from "@/components/Header";
@@ -8,9 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { registerFromImage } from "@/lib/api";
+import { hasRole, useAuth } from "@/lib/auth";
+import { usePageTitle } from "@/lib/usePageTitle";
 import type { RpaResult } from "@/types";
 
 export default function RegisterPage() {
+  usePageTitle("Cadastro por foto");
+  const role = useAuth((state) => state.role);
+  const canOperate = hasRole(role, "operator");
+
   const [file, setFile] = useState<File | null>(null);
   const [tag, setTag] = useState("");
   const [result, setResult] = useState<RpaResult | null>(null);
@@ -39,6 +46,9 @@ export default function RegisterPage() {
       ? "text-amber-400"
       : "text-slate-300";
 
+  const resultTag = result?.draft.tag ?? tag.trim();
+  const showOpenAsset = Boolean(result && (result.created || result.duplicate) && resultTag);
+
   return (
     <div>
       <Header />
@@ -47,13 +57,15 @@ export default function RegisterPage() {
           Cadastro por foto da placa
         </h1>
         <p className="mb-6 text-sm text-slate-400">
-          Envie uma foto da placa de identificacao. O OCR extrai os dados e o
-          fluxo de RPA pre-preenche o cadastro do ativo.
+          Envie uma foto da placa de identificação. O OCR extrai os dados e o
+          fluxo de RPA pré-preenche o cadastro do ativo.
         </p>
 
         <Card className="mb-6">
           <CardContent className="flex flex-col gap-3 p-5">
-            <span className="text-xs text-slate-400">Imagem da placa</span>
+            <span className="text-xs text-slate-400">
+              Imagem da placa (PNG ou JPG — foto legível da plaqueta)
+            </span>
             <input
               type="file"
               accept="image/*"
@@ -69,12 +81,21 @@ export default function RegisterPage() {
               onChange={(event) => setTag(event.target.value)}
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
+            {!canOperate && (
+              <p className="text-xs text-amber-400">
+                Requer papel operador para extrair e cadastrar.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => run(false)} disabled={loading}>
+              <Button onClick={() => run(false)} disabled={loading || !canOperate}>
                 <Camera className="h-4 w-4" />
                 {loading ? "Processando..." : "Extrair dados (OCR)"}
               </Button>
-              <Button variant="outline" onClick={() => run(true)} disabled={loading}>
+              <Button
+                variant="outline"
+                onClick={() => run(true)}
+                disabled={loading || !canOperate}
+              >
                 Extrair e cadastrar
               </Button>
             </div>
@@ -105,6 +126,15 @@ export default function RegisterPage() {
                   </div>
                 ))}
               </dl>
+              {showOpenAsset && (
+                <Link
+                  href={`/asset/${encodeURIComponent(resultTag)}`}
+                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-cyan-400 hover:text-cyan-300"
+                >
+                  Abrir ativo {resultTag}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
             </CardContent>
           </Card>
         )}

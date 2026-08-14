@@ -1,7 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Activity, AlertTriangle, Clock, ThumbsDown } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  HelpCircle,
+  Loader2,
+  ThumbsDown,
+  WifiOff,
+} from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +29,7 @@ const SEVERITY_BORDER: Record<string, string> = {
   INFO: "#64748b",
 };
 
-/** Secao "Saude do ativo": baseline, anomalia, RUL e timeline de alertas. */
+/** Seção "Saúde do ativo": baseline, anomalia, RUL e timeline de alertas. */
 export function AssetHealth({ tag }: { tag: string }) {
   const push = useToasts((state) => state.push);
   const [reported, setReported] = useState(false);
@@ -46,8 +55,40 @@ export function AssetHealth({ tag }: { tag: string }) {
     refetchInterval: 8000,
   });
 
+  // Estado geral honesto: nunca "verde" sem dado positivo real.
+  // Precedência: carregando -> sem conexão -> sem dados -> anômalo -> normal.
+  const loading = baseline.isPending || anomaly.isPending;
+  const offline = baseline.isError && anomaly.isError;
+  const noData =
+    baseline.data?.available === false && anomaly.data?.available === false;
   const isAnomalous =
     anomaly.data?.is_anomaly === true || baseline.data?.decision === "anomalo";
+
+  const overall = loading
+    ? {
+        icon: <Loader2 className="h-5 w-5 animate-spin text-slate-400" />,
+        text: "Verificando estado...",
+      }
+    : offline
+      ? {
+          icon: <WifiOff className="h-5 w-5 text-amber-400" />,
+          text: "Estado desconhecido — sem conexão com a API",
+        }
+      : noData
+        ? {
+            icon: <HelpCircle className="h-5 w-5 text-slate-400" />,
+            text: "Sem dados suficientes para avaliar",
+          }
+        : isAnomalous
+          ? {
+              icon: <Activity className="h-5 w-5 text-amber-400" />,
+              text: "Atenção — desvio detectado",
+            }
+          : {
+              icon: <Activity className="h-5 w-5 text-emerald-400" />,
+              text: "Operação normal",
+            };
+
   const rulDays = rul.data?.rul_days ?? null;
   const rulPercent =
     rulDays !== null ? Math.max(3, Math.min(100, (rulDays / 90) * 100)) : 100;
@@ -59,41 +100,43 @@ export function AssetHealth({ tag }: { tag: string }) {
         : "bg-emerald-500";
 
   const reportIncorrect = async () => {
-    await sendMlFeedback({
-      asset_tag: tag,
-      model: "anomaly",
-      prediction: anomaly.data?.is_anomaly ? "anomalia" : "normal",
-      is_correct: false,
-    });
-    setReported(true);
-    push({
-      title: "Feedback registrado",
-      description: "Obrigado - a predicao foi marcada para revisao.",
-      severity: "info",
-    });
+    try {
+      await sendMlFeedback({
+        asset_tag: tag,
+        model: "anomaly",
+        prediction: anomaly.data?.is_anomaly ? "anomalia" : "normal",
+        is_correct: false,
+      });
+      setReported(true);
+      push({
+        title: "Feedback registrado",
+        description: "Obrigado — a predição foi marcada para revisão.",
+        severity: "info",
+      });
+    } catch (error) {
+      push({
+        title: "Falha ao enviar o feedback",
+        description: error instanceof Error ? error.message : undefined,
+        severity: "critical",
+      });
+    }
   };
 
   return (
     <section className="mb-6">
       <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-        Saude do ativo
+        Saúde do ativo
       </h2>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="p-4">
           <div className="flex items-center gap-2">
-            <Activity
-              className={
-                isAnomalous ? "h-5 w-5 text-amber-400" : "h-5 w-5 text-emerald-400"
-              }
-            />
-            <p className="font-medium text-slate-100">
-              {isAnomalous ? "Atencao - desvio detectado" : "Operacao normal"}
-            </p>
+            {overall.icon}
+            <p className="font-medium text-slate-100">{overall.text}</p>
           </div>
           <p className="mt-2 text-xs text-slate-400">
             Baseline (Isolation Forest):{" "}
             {baseline.data?.available
-              ? `${baseline.data.decision} - score ${baseline.data.score}`
+              ? `${baseline.data.decision} — score ${baseline.data.score}`
               : "aguardando dados"}
           </p>
         </Card>
@@ -101,7 +144,7 @@ export function AssetHealth({ tag }: { tag: string }) {
         <Card className="p-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-cyan-400" />
-            <p className="font-medium text-slate-100">Deteccao de anomalia</p>
+            <p className="font-medium text-slate-100">Detecção de anomalia</p>
           </div>
           <p className="mt-2 text-xs text-slate-400">
             {anomaly.data?.available
@@ -117,14 +160,14 @@ export function AssetHealth({ tag }: { tag: string }) {
             className="mt-2 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 disabled:opacity-50"
           >
             <ThumbsDown className="h-3.5 w-3.5" />
-            {reported ? "Predicao reportada" : "Reportar predicao incorreta"}
+            {reported ? "Predição reportada" : "Reportar predição incorreta"}
           </button>
         </Card>
 
         <Card className="p-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-violet-400" />
-            <p className="font-medium text-slate-100">Vida util (RUL)</p>
+            <p className="font-medium text-slate-100">Vida útil (RUL)</p>
           </div>
           {rul.data?.available ? (
             rulDays !== null ? (
@@ -140,24 +183,30 @@ export function AssetHealth({ tag }: { tag: string }) {
                   />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Intervalo: {rul.data.confidence_low_days} -{" "}
+                  Intervalo: {rul.data.confidence_low_days} —{" "}
                   {rul.data.confidence_high_days} dias
                 </p>
               </>
             ) : (
               <p className="mt-2 text-sm text-emerald-400">
-                Vida util longa - sem degradacao mensuravel
+                Vida útil longa — sem degradação mensurável
               </p>
             )
           ) : (
-            <p className="mt-2 text-xs text-slate-400">Historico insuficiente</p>
+            <p className="mt-2 text-xs text-slate-400">Histórico insuficiente</p>
           )}
         </Card>
       </div>
 
       <Card className="mt-4">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Alertas recentes</CardTitle>
+          <Link
+            href={`/alerts?tag=${encodeURIComponent(tag)}`}
+            className="text-xs text-cyan-400 hover:text-cyan-300"
+          >
+            Ver todos →
+          </Link>
         </CardHeader>
         <CardContent>
           {(alerts.data ?? []).length === 0 && (
@@ -165,20 +214,22 @@ export function AssetHealth({ tag }: { tag: string }) {
           )}
           <ul className="flex flex-col gap-2">
             {(alerts.data ?? []).slice(0, 8).map((alert) => (
-              <li
-                key={alert.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 pl-3 text-sm"
-                style={{
-                  borderColor: SEVERITY_BORDER[alert.severity] ?? "#64748b",
-                }}
-              >
-                <span className="text-xs text-slate-500">
-                  {new Date(alert.created_at).toLocaleString("pt-BR")}
-                </span>
-                <span className="text-xs font-medium text-slate-400">
-                  {alert.alert_type}
-                </span>
-                <span className="text-slate-200">{alert.message}</span>
+              <li key={alert.id}>
+                <Link
+                  href={`/alerts?tag=${encodeURIComponent(tag)}`}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 pl-3 text-sm hover:bg-slate-800/40"
+                  style={{
+                    borderColor: SEVERITY_BORDER[alert.severity] ?? "#64748b",
+                  }}
+                >
+                  <span className="text-xs text-slate-500">
+                    {new Date(alert.created_at).toLocaleString("pt-BR")}
+                  </span>
+                  <span className="text-xs font-medium text-slate-400">
+                    {alert.alert_type}
+                  </span>
+                  <span className="text-slate-200">{alert.message}</span>
+                </Link>
               </li>
             ))}
           </ul>

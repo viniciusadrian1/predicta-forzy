@@ -8,7 +8,7 @@ export function Providers({ children }: { children: ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { refetchOnWindowFocus: false, retry: 1 },
+          queries: { refetchOnWindowFocus: true, retry: 1 },
         },
       }),
   );
