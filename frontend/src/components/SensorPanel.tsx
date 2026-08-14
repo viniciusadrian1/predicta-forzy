@@ -51,9 +51,20 @@ interface SensorPanelProps {
   label: string;
   unit: string;
   color: string;
+  /** Limiares de severidade — colorem a leitura (âmbar/vermelho) ao exceder. */
+  warn?: number;
+  crit?: number;
 }
 
-export function SensorPanel({ tag, variable, label, unit, color }: SensorPanelProps) {
+export function SensorPanel({
+  tag,
+  variable,
+  label,
+  unit,
+  color,
+  warn,
+  crit,
+}: SensorPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [windowKey, setWindowKey] = useState("1h");
   const win = WINDOWS.find((item) => item.key === windowKey) ?? WINDOWS[0];
@@ -78,12 +89,20 @@ export function SensorPanel({ tag, variable, label, unit, color }: SensorPanelPr
   const points = query.data?.points ?? [];
   const current = points.length > 0 ? points[points.length - 1] : null;
 
+  // Leitura colorida por severidade (padrão de sala de controle).
+  const valueClass =
+    current && crit !== undefined && current.value >= crit
+      ? "text-red-400"
+      : current && warn !== undefined && current.value >= warn
+        ? "text-amber-400"
+        : "text-slate-100";
+
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-slate-400">{label}</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-100">
+          <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueClass}`}>
             {current ? current.value.toLocaleString("pt-BR") : "--"}
             <span className="ml-1 text-sm font-normal text-slate-500">{unit}</span>
           </p>

@@ -23,16 +23,26 @@ interface AssetPageProps {
 }
 
 // `variable` são as chaves canônicas da telemetria (OPC-UA) — não traduzir.
+// warn/crit espelham os limiares do avaliador de alertas (ISO 10816 / térmico).
 const SENSORS = [
   { variable: "Tensao", label: "Tensão", unit: "V", color: "#38bdf8" },
   { variable: "Corrente", label: "Corrente", unit: "A", color: "#22d3ee" },
-  { variable: "Temperatura", label: "Temperatura", unit: "C", color: "#f59e0b" },
+  {
+    variable: "Temperatura",
+    label: "Temperatura",
+    unit: "C",
+    color: "#f59e0b",
+    warn: 80,
+    crit: 95,
+  },
   { variable: "Rotacao", label: "Rotação", unit: "RPM", color: "#a78bfa" },
   {
     variable: "Vibracao_Velocidade_RMS",
     label: "Vibração (velocidade)",
     unit: "mm/s",
     color: "#34d399",
+    warn: 4.5,
+    crit: 7.1,
   },
   {
     variable: "Vibracao_Aceleracao_RMS",
@@ -152,6 +162,8 @@ export default function AssetPage({ params }: AssetPageProps) {
                     label={sensor.label}
                     unit={sensor.unit}
                     color={sensor.color}
+                    warn={sensor.warn}
+                    crit={sensor.crit}
                   />
                 ))}
               </div>
