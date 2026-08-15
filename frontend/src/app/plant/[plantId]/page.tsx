@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, ServerCrash } from "lucide-react";
+import { Download, MapPinOff, ServerCrash } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
@@ -17,6 +18,7 @@ interface PlantPageProps {
 
 export default function PlantPage({ params }: PlantPageProps) {
   const { plantId } = params;
+  const router = useRouter();
 
   const plantsQuery = useQuery({
     queryKey: ["plants"],
@@ -34,6 +36,24 @@ export default function PlantPage({ params }: PlantPageProps) {
   const assets = (assetsQuery.data ?? []).filter(
     (asset) => asset.plant_id === null || asset.plant_id === plantId,
   );
+
+  // Id inexistente: a query resolveu mas nenhuma planta casa -> estado claro.
+  if (plantsQuery.isSuccess && !plant) {
+    return (
+      <AppShell>
+        <EmptyState
+          icon={MapPinOff}
+          title="Planta não encontrada"
+          description="O identificador da planta não existe ou foi removido."
+          action={
+            <Button variant="outline" onClick={() => router.push("/overview")}>
+              Voltar para a visão geral
+            </Button>
+          }
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

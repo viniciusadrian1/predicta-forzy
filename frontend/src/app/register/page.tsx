@@ -52,6 +52,13 @@ export default function RegisterPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl">
+        <p className="mb-2 text-xs text-slate-500">
+          <Link href="/assets" className="hover:text-slate-300">
+            Ativos
+          </Link>
+          {" / "}
+          <span className="text-slate-400">Cadastro por foto</span>
+        </p>
         <h1 className="mb-1 text-xl font-semibold text-slate-100">
           Cadastro por foto da placa
         </h1>

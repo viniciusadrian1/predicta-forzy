@@ -6,6 +6,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  Bell,
   Bot,
   ChevronRight,
   Factory,
@@ -99,6 +100,7 @@ function useNav(): NavItem[] {
     ...(plantId
       ? [{ href: `/plant/${plantId}`, label: "Planta", icon: Factory, match: ["/plant"] }]
       : []),
+    { href: "/alerts", label: "Alertas", icon: Bell, match: ["/alerts"] },
     { href: "/chat", label: "Assistente", icon: Bot, match: ["/chat"] },
   ];
 }
