@@ -1,20 +1,25 @@
 import { useAuth } from "@/lib/auth";
 import type {
+  AccessPolicy,
   Alert,
   AnomalyPrediction,
   Asset,
+  AuditEntry,
   AuthToken,
   BaselinePrediction,
   ChatMessage,
   ChatSource,
+  DataLineage,
   HierarchyPlant,
   LatestSnapshot,
+  MlStatus,
   NameplateExtraction,
   Plant,
   RagStatus,
   RpaResult,
   RulEstimate,
   TelemetrySeries,
+  UserAccount,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -323,4 +328,46 @@ export async function streamChat(
       }
     }
   }
+}
+
+// --- Governança / Administração ---
+export async function getAuditLog(limit = 100): Promise<AuditEntry[]> {
+  return parse<AuditEntry[]>(
+    await fetch(apiUrl(`/audit?limit=${limit}`), {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
+  );
+}
+
+export async function getAccessPolicy(): Promise<AccessPolicy> {
+  return parse<AccessPolicy>(
+    await fetch(apiUrl("/governance/access-policy"), { cache: "no-store" }),
+  );
+}
+
+export async function getDataLineage(): Promise<DataLineage> {
+  return parse<DataLineage>(
+    await fetch(apiUrl("/governance/data-lineage"), {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
+  );
+}
+
+export async function listUsers(): Promise<UserAccount[]> {
+  return parse<UserAccount[]>(
+    await fetch(apiUrl("/users"), { headers: authHeaders(), cache: "no-store" }),
+  );
+}
+
+// --- Modelos / IA ---
+export async function getMlStatus(): Promise<MlStatus> {
+  return parse<MlStatus>(await fetch(apiUrl("/ml/status"), { cache: "no-store" }));
+}
+
+export async function trainModels(): Promise<MlStatus> {
+  return parse<MlStatus>(
+    await fetch(apiUrl("/ml/train"), { method: "POST", headers: authHeaders() }),
+  );
 }

@@ -8,12 +8,17 @@ import {
   Activity,
   Bell,
   Bot,
+  Boxes,
+  Camera,
   ChevronRight,
+  Cpu,
   Factory,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -21,7 +26,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHierarchy } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { hasRole, useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const STATUS_DOT: Record<string, string> = {
@@ -88,49 +93,129 @@ interface NavItem {
   icon: typeof LayoutDashboard;
   /** Prefixos de rota que marcam o item como ativo. */
   match: string[];
+  /** Papel mínimo para o item aparecer (ausente = todos). */
+  minRole?: "operator" | "engineer" | "admin";
 }
 
-function useNav(): NavItem[] {
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+function useNavGroups(): NavGroup[] {
   // O item "Planta" leva à primeira planta cadastrada.
   const hierarchyQuery = useQuery({ queryKey: ["hierarchy"], queryFn: getHierarchy });
   const plantId = hierarchyQuery.data?.[0]?.id;
   return [
-    { href: "/overview", label: "Visão Geral", icon: LayoutDashboard, match: ["/overview"] },
-    { href: "/assets", label: "Ativos", icon: Package, match: ["/assets", "/asset/", "/register"] },
-    ...(plantId
-      ? [{ href: `/plant/${plantId}`, label: "Planta", icon: Factory, match: ["/plant"] }]
-      : []),
-    { href: "/alerts", label: "Alertas", icon: Bell, match: ["/alerts"] },
-    { href: "/chat", label: "Assistente", icon: Bot, match: ["/chat"] },
+    {
+      title: "Operação",
+      items: [
+        { href: "/overview", label: "Visão Geral", icon: LayoutDashboard, match: ["/overview"] },
+        { href: "/alerts", label: "Alertas", icon: Bell, match: ["/alerts"] },
+        ...(plantId
+          ? [{ href: `/plant/${plantId}`, label: "Planta", icon: Factory, match: ["/plant"] }]
+          : []),
+      ],
+    },
+    {
+      title: "Ativos",
+      items: [
+        { href: "/assets", label: "Ativos", icon: Package, match: ["/assets", "/asset/"] },
+        {
+          href: "/register",
+          label: "Cadastrar por foto",
+          icon: Camera,
+          match: ["/register"],
+          minRole: "operator",
+        },
+        {
+          href: "/models",
+          label: "Modelos / IA",
+          icon: Cpu,
+          match: ["/models"],
+          minRole: "engineer",
+        },
+      ],
+    },
+    {
+      title: "Assistente",
+      items: [{ href: "/chat", label: "Chat", icon: Bot, match: ["/chat"] }],
+    },
+    {
+      title: "Administração",
+      items: [
+        {
+          href: "/admin/users",
+          label: "Usuários",
+          icon: Users,
+          match: ["/admin/users"],
+          minRole: "admin",
+        },
+        {
+          href: "/admin/audit",
+          label: "Auditoria",
+          icon: Boxes,
+          match: ["/admin/audit"],
+          minRole: "admin",
+        },
+        {
+          href: "/admin/governance",
+          label: "Governança",
+          icon: ShieldCheck,
+          match: ["/admin/governance"],
+          minRole: "admin",
+        },
+      ],
+    },
   ];
 }
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const nav = useNav();
+  const role = useAuth((s) => s.role);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const groups = useNavGroups();
+
   return (
-    <nav className="flex flex-col gap-1 px-3">
-      {nav.map((item) => {
-        const active = item.match.some((prefix) => pathname.startsWith(prefix));
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => {
+        // Filtra por papel só após montar (o role vem do store persistido).
+        const items = group.items.filter(
+          (item) => !item.minRole || (mounted && hasRole(role, item.minRole)),
+        );
+        if (items.length === 0) return null;
         return (
-          <Link
-            key={item.label}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-              active
-                ? "bg-cyan-500/10 font-medium text-cyan-400"
-                : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
+          <div key={group.title}>
+            <p className="mb-1 px-6 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+              {group.title}
+            </p>
+            <nav className="flex flex-col gap-0.5 px-3">
+              {items.map((item) => {
+                const active = item.match.some((prefix) => pathname.startsWith(prefix));
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-cyan-500/10 font-medium text-cyan-400"
+                        : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         );
       })}
-    </nav>
+    </div>
   );
 }
 
@@ -185,11 +270,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Activity className="h-5 w-5 text-cyan-400" />
           Predicta
         </Link>
-        <NavLinks />
-        <p className="mt-5 px-6 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-          Hierarquia
-        </p>
-        <div className="mt-2 flex-1 overflow-y-auto pb-4">
+        <div className="flex-1 overflow-y-auto pb-4">
+          <NavLinks />
+          <p className="mb-1 mt-5 px-6 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+            Hierarquia
+          </p>
           <HierarchyTree />
         </div>
         <UserBlock />

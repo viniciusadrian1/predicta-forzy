@@ -214,3 +214,61 @@ export interface RagStatus {
   llm_mode: "anthropic" | "offline";
   embedding_dim: number;
 }
+
+// --- Governança / Administração ---
+export interface AuditEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  method: string | null;
+  path: string | null;
+  status_code: number | null;
+  ip_address: string | null;
+}
+
+export interface AccessRule {
+  resource: string;
+  methods: string[];
+  min_role: string;
+  description: string;
+}
+
+export interface AccessPolicy {
+  roles: string[];
+  rbac_enabled: boolean;
+  rules: AccessRule[];
+}
+
+export interface DataAssetEntry {
+  dataset: string;
+  origin: string;
+  classification: string;
+  storage: string;
+  retention: string;
+  notes: string;
+}
+
+export interface DataLineage {
+  document: string;
+  classification_levels: string[];
+  datasets: DataAssetEntry[];
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  role: string;
+  full_name: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface MlStatus {
+  ready: boolean;
+  model_version: string | null;
+  trained_at: string | null;
+  n_samples: number | null;
+}
