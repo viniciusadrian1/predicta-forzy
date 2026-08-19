@@ -272,3 +272,52 @@ export interface MlStatus {
   trained_at: string | null;
   n_samples: number | null;
 }
+
+// --- Volt (chatbot de manutenção) ---
+export interface VoltState {
+  step: "aguardando_ativo" | "aguardando_sintoma" | "concluido" | "handoff";
+  asset_tag: string | null;
+  asset_name: string | null;
+  symptom: string | null;
+  not_found_attempts: number;
+}
+
+export interface VoltDiagnosis {
+  fault: string;
+  confidence: number;
+  evidence: string;
+  readings: Record<string, number> | null;
+}
+
+export interface WorkOrder {
+  id: string;
+  number: string;
+  asset_tag: string;
+  symptom: string;
+  fault: string;
+  confidence: number;
+  priority: string;
+  status: string;
+  opened_by: string;
+  created_at: string;
+}
+
+export interface VoltHandoff {
+  asset_tag: string | null;
+  asset_name: string | null;
+  symptom: string | null;
+  diagnosis: string | null;
+  confidence: number | null;
+  actions_taken: string;
+  reason: string;
+}
+
+export interface VoltReply {
+  message: string;
+  state: VoltState;
+  quick_replies: string[];
+  diagnosis: VoltDiagnosis | null;
+  work_order: WorkOrder | null;
+  handoff: VoltHandoff | null;
+  done: boolean;
+}

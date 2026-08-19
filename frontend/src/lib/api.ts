@@ -20,6 +20,9 @@ import type {
   RulEstimate,
   TelemetrySeries,
   UserAccount,
+  VoltReply,
+  VoltState,
+  WorkOrder,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -369,5 +372,29 @@ export async function getMlStatus(): Promise<MlStatus> {
 export async function trainModels(): Promise<MlStatus> {
   return parse<MlStatus>(
     await fetch(apiUrl("/ml/train"), { method: "POST", headers: authHeaders() }),
+  );
+}
+
+// --- Volt (chatbot de manutenção) ---
+export async function voltGreeting(): Promise<VoltReply> {
+  return parse<VoltReply>(await fetch(apiUrl("/volt/greeting"), { cache: "no-store" }));
+}
+
+export async function voltMessage(message: string, state: VoltState | null): Promise<VoltReply> {
+  const response = await fetch(apiUrl("/volt/message"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ message, state: state ?? {} }),
+  });
+  return parse<VoltReply>(response);
+}
+
+export async function getWorkOrders(tag?: string): Promise<WorkOrder[]> {
+  const suffix = tag ? `?tag=${encodeURIComponent(tag)}` : "";
+  return parse<WorkOrder[]>(
+    await fetch(apiUrl(`/volt/work-orders${suffix}`), {
+      headers: authHeaders(),
+      cache: "no-store",
+    }),
   );
 }

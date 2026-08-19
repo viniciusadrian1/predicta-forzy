@@ -1727,6 +1727,172 @@
         }
       }
     },
+    "/api/v1/volt/greeting": {
+      "get": {
+        "tags": [
+          "volt"
+        ],
+        "summary": "Volt Greeting",
+        "description": "Mensagem inicial do Volt (capacidades ditas de cara).",
+        "operationId": "volt_greeting_api_v1_volt_greeting_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoltReply"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volt/message": {
+      "post": {
+        "tags": [
+          "volt"
+        ],
+        "summary": "Volt Message",
+        "description": "Processa um turno do atendimento guiado do Volt.",
+        "operationId": "volt_message_api_v1_volt_message_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoltRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoltReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volt/work-orders": {
+      "get": {
+        "tags": [
+          "volt"
+        ],
+        "summary": "List Work Orders",
+        "description": "Lista as ordens de servico abertas pelo Volt (requer papel operator).",
+        "operationId": "list_work_orders_api_v1_volt_work_orders_get",
+        "parameters": [
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtra por TAG do ativo",
+              "title": "Tag"
+            },
+            "description": "Filtra por TAG do ativo"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkOrderOut"
+                  },
+                  "title": "Response List Work Orders Api V1 Volt Work Orders Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "summary": "Metrics",
@@ -3268,6 +3434,43 @@
         "title": "DataLineageOut",
         "description": "Catalogo de dados classificado, exposto pela API de governanca."
       },
+      "DiagnosisOut": {
+        "properties": {
+          "fault": {
+            "type": "string",
+            "title": "Fault"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "evidence": {
+            "type": "string",
+            "title": "Evidence"
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fault",
+          "confidence",
+          "evidence"
+        ],
+        "title": "DiagnosisOut"
+      },
       "FeedbackRequest": {
         "properties": {
           "asset_tag": {
@@ -3338,6 +3541,85 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HandoffSummary": {
+        "properties": {
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name"
+          },
+          "symptom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom"
+          },
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "actions_taken": {
+            "type": "string",
+            "title": "Actions Taken"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_tag",
+          "asset_name",
+          "symptom",
+          "diagnosis",
+          "confidence",
+          "actions_taken",
+          "reason"
+        ],
+        "title": "HandoffSummary",
+        "description": "Resumo estruturado entregue ao tecnico humano (sem repetir nada)."
       },
       "HealthResponse": {
         "properties": {
@@ -4240,6 +4522,198 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VoltReply": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "state": {
+            "$ref": "#/components/schemas/VoltStateModel"
+          },
+          "quick_replies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quick Replies"
+          },
+          "diagnosis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosisOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work_order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkOrderOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandoffSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "state"
+        ],
+        "title": "VoltReply",
+        "description": "Resposta de um turno do Volt."
+      },
+      "VoltRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Message",
+            "default": ""
+          },
+          "state": {
+            "$ref": "#/components/schemas/VoltStateModel"
+          }
+        },
+        "type": "object",
+        "title": "VoltRequest",
+        "description": "Uma mensagem do usuario + o estado atual do atendimento."
+      },
+      "VoltStateModel": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "aguardando_ativo",
+              "aguardando_sintoma",
+              "concluido",
+              "handoff"
+            ],
+            "title": "Step",
+            "default": "aguardando_ativo"
+          },
+          "asset_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Tag"
+          },
+          "asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name"
+          },
+          "symptom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom"
+          },
+          "not_found_attempts": {
+            "type": "integer",
+            "title": "Not Found Attempts",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "VoltStateModel",
+        "description": "Contexto do atendimento, mantido pelo cliente entre os turnos."
+      },
+      "WorkOrderOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "asset_tag": {
+            "type": "string",
+            "title": "Asset Tag"
+          },
+          "symptom": {
+            "type": "string",
+            "title": "Symptom"
+          },
+          "fault": {
+            "type": "string",
+            "title": "Fault"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "opened_by": {
+            "type": "string",
+            "title": "Opened By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "asset_tag",
+          "symptom",
+          "fault",
+          "confidence",
+          "priority",
+          "status",
+          "opened_by",
+          "created_at"
+        ],
+        "title": "WorkOrderOut"
       }
     }
   }

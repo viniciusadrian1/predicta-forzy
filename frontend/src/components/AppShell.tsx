@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bell,
-  Bot,
+  BookOpen,
   Boxes,
   Camera,
   ChevronRight,
@@ -19,6 +19,7 @@ import {
   Package,
   ShieldCheck,
   Users,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -139,7 +140,10 @@ function useNavGroups(): NavGroup[] {
     },
     {
       title: "Assistente",
-      items: [{ href: "/chat", label: "Chat", icon: Bot, match: ["/chat"] }],
+      items: [
+        { href: "/volt", label: "Volt (manutenção)", icon: Wrench, match: ["/volt"] },
+        { href: "/chat", label: "Base técnica", icon: BookOpen, match: ["/chat"] },
+      ],
     },
     {
       title: "Administração",
