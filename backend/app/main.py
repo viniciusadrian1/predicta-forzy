@@ -33,6 +33,7 @@ from app.modules.telemetry.external import ExternalSensorsService
 from app.modules.telemetry.ingestion import TelemetryIngestionService
 from app.modules.telemetry.router import router as telemetry_router
 from app.modules.vision.router import router as vision_router
+from app.modules.volt.router import router as volt_router
 from app.schemas.common import HealthResponse
 
 settings = get_settings()
@@ -116,6 +117,8 @@ def create_app() -> FastAPI:
         app.include_router(alerts_router, prefix=prefix)
     if settings.feature_rag:
         app.include_router(rag_router, prefix=prefix)
+    if settings.feature_volt:
+        app.include_router(volt_router, prefix=prefix)
 
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 

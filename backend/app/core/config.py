@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     # --- Alertas: ativos avaliados pelo verificador periodico ---
     monitored_asset_tags: str = "MTR-001,MTR-F01,MTR-F02"
 
+    # --- Volt (chatbot de manutencao) ---
+    # Limiar de confianca: abaixo dele, o diagnostico e escalado a um humano.
+    volt_confidence_threshold: float = 0.5
+    # Ativos criticos para a producao: sempre exigem revisao humana, mesmo
+    # com alta confianca. ponytail: virar campo do ativo quando houver UI.
+    volt_critical_asset_tags: str = "MTR-001"
+
     # --- Feature flags (modularidade) ---
     feature_auth: bool = True
     feature_assets: bool = True
@@ -94,6 +101,7 @@ class Settings(BaseSettings):
     feature_rag: bool = True
     feature_automation: bool = True
     feature_governance: bool = True
+    feature_volt: bool = True
 
     @property
     def catalog_database_url(self) -> str:

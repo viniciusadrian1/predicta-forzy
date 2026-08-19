@@ -15,6 +15,7 @@ os.environ.setdefault("FEATURE_AUTOMATION", "true")
 os.environ.setdefault("FEATURE_ML", "true")
 os.environ.setdefault("FEATURE_ALERTS", "true")
 os.environ.setdefault("FEATURE_RAG", "true")
+os.environ.setdefault("FEATURE_VOLT", "true")
 os.environ.setdefault("FEATURE_GOVERNANCE", "false")
 # RBAC desligado por padrao nos testes; test_rbac.py o ativa pontualmente.
 os.environ.setdefault("RBAC_ENABLED", "false")
