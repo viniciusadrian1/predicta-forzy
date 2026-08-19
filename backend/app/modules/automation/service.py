@@ -76,7 +76,18 @@ class RpaService:
         # 3. Deduplicacao por TAG.
         duplicate = False
         created = False
-        message = "Rascunho gerado a partir do OCR; revise antes de cadastrar."
+        if extraction.engine == "indisponivel":
+            message = (
+                "OCR indisponivel no servidor - nenhum dado extraido. "
+                "Preencha os campos manualmente."
+            )
+        elif not extraction.fields:
+            message = (
+                "Nenhum campo reconhecido na imagem. Revise a foto ou "
+                "preencha os campos manualmente."
+            )
+        else:
+            message = "Rascunho gerado a partir do OCR; revise antes de cadastrar."
         if tag:
             existing = await self._repo.get_asset_by_tag(tag)
             if existing is not None:

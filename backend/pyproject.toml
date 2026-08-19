@@ -28,6 +28,8 @@ dependencies = [
     "pandas>=2.2",
     "httpx>=0.27",
     "pypdf>=5.0",
+    # OCR real de placas; o binario tesseract-ocr vem do sistema (ver Dockerfile).
+    "pytesseract>=0.3.10",
 ]
 
 [project.optional-dependencies]

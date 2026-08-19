@@ -21,7 +21,9 @@ async def test_rpa_register_returns_draft(client):
     body = response.json()
     assert body["draft"]["tag"] == "MTR-RPA"
     assert body["created"] is False
-    assert len(body["fields"]) > 0
+    # Imagem sem placa legivel -> resultado honesto (sem dados fabricados).
+    assert isinstance(body["fields"], list)
+    assert body["ocr_engine"] in {"tesseract", "paddleocr", "indisponivel"}
 
 
 async def test_rpa_auto_create(client):

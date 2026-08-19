@@ -1,6 +1,16 @@
 """Testes do modulo de visao: parser de placas de identificacao."""
 
-from app.modules.vision.plate_ocr import EXPECTED_FIELDS, parse_nameplate_text
+import io
+
+from PIL import Image
+
+from app.modules.vision import plate_ocr
+from app.modules.vision.plate_ocr import (
+    EXPECTED_FIELDS,
+    extract_nameplate,
+    parse_generic_fields,
+    parse_nameplate_text,
+)
 
 _NAMEPLATES: dict[str, str] = {
     "WEG": "\n".join(
@@ -80,3 +90,49 @@ def test_parse_empty_text_returns_no_fields():
 def test_parse_converts_cv_to_kw():
     fields = {f.field: f.value for f in parse_nameplate_text("MOTOR 10 CV 220 V")}
     assert "power_kw" in fields
+
+
+# --- Placa generica (equipamento que nao e motor) ---
+_POULTRY = "\n".join(
+    [
+        "Tecno Poultry Equipment S.p.A",
+        "Via L. da Vinci 15 - 35010",
+        "Order X/3148",
+        "Client GRANJA BAILON",
+        "Machine",
+        "NIAGARA",
+        "Serial X/3148/5B",
+        "Date 11/2015",
+    ]
+)
+
+
+def test_generic_parser_extracts_non_motor_nameplate():
+    fields = {f.field: f.value for f in parse_generic_fields(_POULTRY, base_confidence=0.8)}
+    assert "Tecno Poultry Equipment" in (fields.get("manufacturer") or "")
+    assert fields.get("model") == "NIAGARA"
+    assert fields.get("serial_number") == "X/3148/5B"
+    assert fields.get("manufacture_date") == "11/2015"
+
+
+def test_generic_parser_does_not_invent_motor_fields():
+    # A placa nao tem kW/V/A/RPM: nada de campos de motor inventados.
+    motor = {f.field for f in parse_nameplate_text(_POULTRY)}
+    assert "power_kw" not in motor
+    assert "voltage_v" not in motor
+    assert "nominal_rpm" not in motor
+
+
+def _png() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (120, 60), color="white").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_extract_is_honest_without_engine(monkeypatch):
+    # Sem motor de OCR: resultado vazio e sinalizado, NUNCA dados fabricados.
+    monkeypatch.setattr(plate_ocr, "get_ocr_engine", lambda: None)
+    result = extract_nameplate(_png())
+    assert result.engine == "indisponivel"
+    assert result.fields == []
+    assert result.coverage == 0.0

@@ -6,6 +6,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Binario do Tesseract (OCR real de placas) + pacotes de idioma pt/en.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-por tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 # Extras opcionais de pip (ex.: PIP_EXTRAS="[rag]" habilita o backend ChromaDB).
 ARG PIP_EXTRAS=""
 

@@ -44,8 +44,11 @@ async def test_vision_extract_from_image(client):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["engine"] in {"stub", "paddleocr"}
-    assert len(body["fields"]) > 0
+    assert body["engine"] in {"tesseract", "paddleocr", "indisponivel"}
+    assert isinstance(body["fields"], list)
+    assert body["note"]  # sempre acompanha uma nota honesta
+    # Jamais fabrica: o antigo stub WEG nao pode reaparecer.
+    assert all(field["value"] != "W22 IR3 Premium" for field in body["fields"])
 
 
 async def test_vision_rejects_invalid_image(client):

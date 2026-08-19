@@ -1,9 +1,12 @@
-"""Pipeline de OCR para placas de identificacao de motores.
+"""Pipeline de OCR para placas de identificacao de equipamentos.
 
-Etapas: pre-processamento da imagem -> OCR (motor pluggavel) -> parsing
-regex dos campos tipicos de placa. O motor padrao e o PaddleOCR (extra
-opcional ``ocr``); quando ausente, o servico opera em modo simulado e o
-parser permanece totalmente funcional e testavel.
+Etapas: pre-processamento da imagem -> OCR (Tesseract, ou PaddleOCR se o
+extra ``ocr`` estiver instalado) -> parsing regex dos campos da placa.
+
+IMPORTANTE: quando nenhum motor de OCR esta disponivel, o servico devolve
+um resultado VAZIO e sinaliza a indisponibilidade - jamais inventa dados.
+O parser reconhece tanto campos de motor (kW, V, A, RPM...) quanto campos
+genericos de placa (fabricante, modelo, numero de serie, data).
 """
 
 from __future__ import annotations
@@ -176,6 +179,95 @@ def _coverage(fields: list[ParsedField]) -> float:
     return round(hits / len(EXPECTED_FIELDS), 2)
 
 
+# ----------------------- Parser generico de placa ------------------------
+# Campos rotulados comuns a qualquer placa (nao so motores). O valor pode
+# estar na mesma linha do rotulo ou na linha seguinte (\n opcional).
+_GENERIC_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
+    (
+        "manufacturer",
+        "Fabricante",
+        re.compile(
+            r"(?:FABRICANTE|MANUFACTURER|FABRICANT)\s*[:.]?\s*\n?\s*"
+            r"([A-Za-z][\w .,&/\-]{2,48})",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "model",
+        "Modelo",
+        re.compile(
+            r"(?:MACHINE|M[ÁA]QUINA|MODELO|MODEL)\s*[:.]?\s*\n?\s*" r"([A-Za-z0-9][\w .\-/]{1,40})",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "serial_number",
+        "Numero de serie",
+        re.compile(
+            r"(?:SERIAL|S[ÉE]RIE|N[º°.]?\s*S[ÉE]RIE|SERIAL\s*(?:NO|N[º°]))"
+            r"\s*[:.]?\s*\n?\s*([A-Za-z0-9][\w./\-]{2,40})",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "manufacture_date",
+        "Data de fabricacao",
+        re.compile(
+            r"(?:DATE|DATA)\s*[:.]?\s*\n?\s*(\d{1,2}[/.\-]\d{2,4}|\d{4})",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+# Sufixos que denunciam um nome de empresa numa linha nao rotulada.
+_COMPANY_HINT = re.compile(
+    r"\b(S\.?p\.?A|S\.?A|LTDA|GMBH|INC|CO|EQUIPMENT|MOTORS?|MOTORES|IND[UÚ]STRIA|"
+    r"EQUIPAMENTOS|TECHNOLOG|SISTEMAS)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_generic_fields(text: str, base_confidence: float) -> list[ParsedField]:
+    """Extrai campos genericos de placa (fabricante, modelo, serie, data).
+
+    Cobre equipamentos que nao sao motores. Se o fabricante nao vier rotulado,
+    usa a primeira linha que se pareca com um nome de empresa (confianca menor).
+    """
+    fields: list[ParsedField] = []
+    seen: set[str] = set()
+
+    for key, label, pattern in _GENERIC_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            value = " ".join(match.group(1).split()).strip(" .,-")
+            if value:
+                fields.append(ParsedField(key, label, value, round(base_confidence - 0.05, 2)))
+                seen.add(key)
+
+    # Fabricante nao rotulado: 1a linha com cara de nome de empresa.
+    if "manufacturer" not in seen:
+        for line in (ln.strip() for ln in text.splitlines()):
+            if 3 <= len(line) <= 48 and _COMPANY_HINT.search(line):
+                fields.append(
+                    ParsedField("manufacturer", "Fabricante", line, round(base_confidence - 0.2, 2))
+                )
+                break
+
+    return fields
+
+
+def merge_fields(*groups: list[ParsedField]) -> list[ParsedField]:
+    """Combina grupos de campos, mantendo a primeira ocorrencia de cada chave."""
+    out: list[ParsedField] = []
+    seen: set[str] = set()
+    for group in groups:
+        for field in group:
+            if field.field not in seen:
+                out.append(field)
+                seen.add(field.field)
+    return out
+
+
 # --------------------------- Motor de OCR --------------------------------
 class PaddleOcrEngine:
     """Motor de OCR baseado em PaddleOCR (extra opcional ``ocr``)."""
@@ -200,38 +292,72 @@ class PaddleOcrEngine:
         return "\n".join(lines), mean
 
 
+class TesseractEngine:
+    """Motor de OCR baseado no Tesseract (pytesseract + binario do sistema)."""
+
+    def __init__(self) -> None:
+        import pytesseract
+
+        self._pt = pytesseract
+        # Falha aqui (binario ausente) faz get_ocr_engine cair para None.
+        pytesseract.get_tesseract_version()
+
+    def read_text(self, image: Image.Image) -> tuple[str, float]:
+        # Portugues + ingles; falha de idioma recai para o default do sistema.
+        try:
+            data = self._pt.image_to_data(image, lang="por+eng", output_type=self._pt.Output.DICT)
+        except Exception:
+            data = self._pt.image_to_data(image, output_type=self._pt.Output.DICT)
+
+        # Reconstroi o texto por linha e coleta as confiancas dos tokens validos.
+        lines: dict[tuple[int, int, int], list[str]] = {}
+        confidences: list[float] = []
+        for i, word in enumerate(data["text"]):
+            token = word.strip()
+            conf = float(data["conf"][i])
+            if not token or conf < 0:
+                continue
+            key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+            lines.setdefault(key, []).append(token)
+            confidences.append(conf / 100.0)
+
+        text = "\n".join(" ".join(words) for words in lines.values())
+        mean = sum(confidences) / len(confidences) if confidences else 0.0
+        return text, mean
+
+
 @lru_cache(maxsize=1)
-def get_ocr_engine() -> PaddleOcrEngine | None:
-    """Carrega o motor de OCR uma unica vez; devolve ``None`` se indisponivel."""
+def get_ocr_engine() -> TesseractEngine | PaddleOcrEngine | None:
+    """Carrega o motor de OCR uma unica vez; ``None`` se nenhum disponivel."""
+    try:
+        return TesseractEngine()
+    except Exception as exc:
+        logger.info("Tesseract indisponivel (%s); tentando PaddleOCR", exc)
     try:
         return PaddleOcrEngine()
-    except Exception as exc:  # paddleocr ausente ou falha ao baixar modelo
-        logger.warning("OCR PaddleOCR indisponivel (%s); modo simulado ativo", exc)
+    except Exception as exc:
+        logger.warning("Nenhum motor de OCR disponivel (%s)", exc)
         return None
 
 
-# Campos simulados (placa WEG tipica) usados quando o motor de OCR esta ausente.
-_STUB_FIELDS: tuple[ParsedField, ...] = (
-    ParsedField("manufacturer", "Fabricante", "WEG", 0.0),
-    ParsedField("model", "Modelo", "W22 IR3 Premium", 0.0),
-    ParsedField("power_kw", "Potencia (kW)", "7,5", 0.0),
-    ParsedField("voltage_v", "Tensao (V)", "220/380", 0.0),
-    ParsedField("nominal_current_a", "Corrente (A)", "25,4/14,7", 0.0),
-    ParsedField("frequency_hz", "Frequencia (Hz)", "60", 0.0),
-    ParsedField("nominal_rpm", "Rotacao (RPM)", "1755", 0.0),
-    ParsedField("ip_rating", "Grau de protecao", "IP55", 0.0),
-    ParsedField("insulation_class", "Classe de isolamento", "F", 0.0),
-)
-
-
 def extract_nameplate(raw: bytes) -> ExtractionResult:
-    """Executa o pipeline completo: pre-processa, faz OCR e parseia a placa."""
+    """Executa o pipeline completo: pre-processa, faz OCR e parseia a placa.
+
+    Sem motor de OCR disponivel, devolve um resultado vazio e honesto
+    (engine ``indisponivel``) - nunca preenche com dados fabricados.
+    """
     image = preprocess_image(raw)  # valida que os bytes sao uma imagem
     engine = get_ocr_engine()
     if engine is None:
-        return ExtractionResult(engine="stub", raw_text="", fields=list(_STUB_FIELDS), coverage=0.0)
+        return ExtractionResult(engine="indisponivel", raw_text="", fields=[], coverage=0.0)
+
     text, mean_conf = engine.read_text(image)
-    fields = parse_nameplate_text(text, base_confidence=round(max(mean_conf, 0.5), 2))
+    base = round(max(mean_conf, 0.3), 2)
+    fields = merge_fields(
+        parse_nameplate_text(text, base_confidence=base),
+        parse_generic_fields(text, base_confidence=base),
+    )
+    engine_name = "tesseract" if isinstance(engine, TesseractEngine) else "paddleocr"
     return ExtractionResult(
-        engine="paddleocr", raw_text=text, fields=fields, coverage=_coverage(fields)
+        engine=engine_name, raw_text=text, fields=fields, coverage=_coverage(fields)
     )

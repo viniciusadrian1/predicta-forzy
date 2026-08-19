@@ -1,8 +1,9 @@
 """Endpoints REST do modulo de visao computacional (OCR de placas).
 
-Sprint 2: OCR real com pipeline pre-processamento -> motor -> parser
-(ver ``app/modules/vision/plate_ocr.py`` e ADR 0003). O motor PaddleOCR e um
-extra opcional; sem ele, o endpoint opera em modo simulado.
+Pipeline: pre-processamento -> motor de OCR (Tesseract) -> parser
+(ver ``app/modules/vision/plate_ocr.py`` e ADR 0003). Sem motor de OCR
+disponivel, o endpoint devolve um resultado vazio e honesto - nunca dados
+fabricados.
 """
 
 from __future__ import annotations
@@ -15,11 +16,22 @@ from app.modules.vision.schemas import NameplateExtractionOut, NameplateField
 
 router = APIRouter(tags=["vision"])
 
-_OCR_NOTE = "Campos extraidos por OCR (PaddleOCR) da imagem enviada."
-_STUB_NOTE = (
-    "Motor de OCR (PaddleOCR) nao instalado - exibindo dados de exemplo. "
-    "Instale o extra com 'pip install .[ocr]' para habilitar o OCR real."
+_UNAVAILABLE_NOTE = (
+    "OCR indisponivel no servidor (Tesseract nao instalado). Nenhum dado foi "
+    "extraido - preencha os campos manualmente."
 )
+_EMPTY_NOTE = (
+    "Nenhum campo reconhecido na imagem. Verifique a nitidez/enquadramento da "
+    "placa ou preencha os campos manualmente."
+)
+
+
+def _note_for(engine: str, has_fields: bool) -> str:
+    if engine == "indisponivel":
+        return _UNAVAILABLE_NOTE
+    if not has_fields:
+        return _EMPTY_NOTE
+    return f"Campos extraidos por OCR ({engine}) da imagem enviada. Revise antes de usar."
 
 
 @router.post(
@@ -57,5 +69,5 @@ async def extract_from_image(
             )
             for field in result.fields
         ],
-        note=_OCR_NOTE if result.engine == "paddleocr" else _STUB_NOTE,
+        note=_note_for(result.engine, bool(result.fields)),
     )
