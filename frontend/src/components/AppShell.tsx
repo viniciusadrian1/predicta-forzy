@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bell,
-  BookOpen,
   Boxes,
   Camera,
   ChevronRight,
@@ -26,6 +25,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { VoltWidget } from "@/components/VoltWidget";
 import { getHierarchy } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -140,10 +140,7 @@ function useNavGroups(): NavGroup[] {
     },
     {
       title: "Assistente",
-      items: [
-        { href: "/volt", label: "Volt (manutenção)", icon: Wrench, match: ["/volt"] },
-        { href: "/chat", label: "Base técnica", icon: BookOpen, match: ["/chat"] },
-      ],
+      items: [{ href: "/volt", label: "Volt", icon: Wrench, match: ["/volt", "/chat"] }],
     },
     {
       title: "Administração",
@@ -311,6 +308,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Volt: assistente flutuante disponivel em todas as telas. */}
+      <VoltWidget />
     </div>
   );
 }

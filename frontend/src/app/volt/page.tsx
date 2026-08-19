@@ -3,7 +3,8 @@
 // Volt — assistente de manutenção (chatbot guiado) + ordens de serviço abertas.
 
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList } from "lucide-react";
+import { BookOpen, ClipboardList } from "lucide-react";
+import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
 import { VoltChat } from "@/components/VoltChat";
@@ -74,6 +75,13 @@ export default function VoltPage() {
           Informe o código do ativo e o sintoma. O Volt lê os sensores, diagnostica e
           abre a ordem de serviço — encaminhando a um técnico quando necessário.
         </p>
+        <Link
+          href="/chat"
+          className="mt-1 inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          Consultar a base técnica (manuais)
+        </Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">

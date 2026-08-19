@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetHealth } from "@/components/AssetHealth";
-import { ChatWidget } from "@/components/ChatWidget";
 import { EmptyState } from "@/components/EmptyState";
 import { NextAction } from "@/components/NextAction";
 import { SensorPanel } from "@/components/SensorPanel";
@@ -186,8 +185,6 @@ export default function AssetPage({ params }: AssetPageProps) {
                 </dl>
               </CardContent>
             </Card>
-
-            <ChatWidget assetTag={asset.tag} />
           </>
         )}
     </AppShell>
