@@ -17,8 +17,8 @@ from app.modules.vision.schemas import NameplateExtractionOut, NameplateField
 router = APIRouter(tags=["vision"])
 
 _UNAVAILABLE_NOTE = (
-    "OCR indisponivel no servidor (Tesseract nao instalado). Nenhum dado foi "
-    "extraido - preencha os campos manualmente."
+    "OCR indisponível no servidor (Tesseract não instalado). Nenhum dado foi "
+    "extraído - preencha os campos manualmente."
 )
 _EMPTY_NOTE = (
     "Nenhum campo reconhecido na imagem. Verifique a nitidez/enquadramento da "
@@ -31,7 +31,7 @@ def _note_for(engine: str, has_fields: bool) -> str:
         return _UNAVAILABLE_NOTE
     if not has_fields:
         return _EMPTY_NOTE
-    return f"Campos extraidos por OCR ({engine}) da imagem enviada. Revise antes de usar."
+    return f"Campos extraídos por OCR ({engine}) da imagem enviada. Revise antes de usar."
 
 
 @router.post(
@@ -51,7 +51,7 @@ async def extract_from_image(
     except Exception as exc:  # imagem invalida ou corrompida
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Nao foi possivel processar a imagem: {exc}",
+            detail=f"Não foi possível processar a imagem: {exc}",
         ) from exc
 
     return NameplateExtractionOut(

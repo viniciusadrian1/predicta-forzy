@@ -136,22 +136,22 @@ class RagService:
         """Compoe uma resposta extrativa a partir dos trechos recuperados."""
         parts: list[str] = []
         if chunks:
-            parts.append("Com base na documentacao tecnica do Predicta:")
+            parts.append("Com base na documentação técnica do Predicta:")
             for chunk in chunks[:2]:
                 parts.append(f"\n[{chunk.document_title}]\n{_trim(chunk.text, 600)}")
         else:
             parts.append(
-                "Nao encontrei na base de conhecimento um trecho diretamente "
-                "relacionado a sua pergunta. Tente reformular com termos mais "
-                "especificos (ex.: vibracao, rolamento, sobrecarga, temperatura)."
+                "Não encontrei na base de conhecimento um trecho diretamente "
+                "relacionado à sua pergunta. Tente reformular com termos mais "
+                "específicos (ex.: vibração, rolamento, sobrecarga, temperatura)."
             )
         if asset_context:
-            parts.append(f"\nSituacao atual do ativo:\n{asset_context}")
+            parts.append(f"\nSituação atual do ativo:\n{asset_context}")
         parts.append(
-            "\nObservacao: resposta gerada em modo offline (sem LLM), de forma "
-            "extrativa a partir da documentacao recuperada. Configure "
+            "\nObservação: resposta gerada em modo offline (sem LLM), de forma "
+            "extrativa a partir da documentação recuperada. Configure "
             "ANTHROPIC_API_KEY para respostas em linguagem natural. Confirme "
-            "sempre com a equipe de manutencao antes de qualquer intervencao."
+            "sempre com a equipe de manutenção antes de qualquer intervenção."
         )
         return "\n".join(parts)
 

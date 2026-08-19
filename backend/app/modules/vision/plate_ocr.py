@@ -76,10 +76,10 @@ _MULTI = rf"{_NUM}(?:\s*/\s*{_NUM})*"
 
 # (chave, rotulo, padrao) para cada campo tipico de placa de motor.
 _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
-    ("power_kw", "Potencia (kW)", re.compile(rf"({_NUM})\s*k\s*W", re.IGNORECASE)),
+    ("power_kw", "Potência (kW)", re.compile(rf"({_NUM})\s*k\s*W", re.IGNORECASE)),
     (
         "voltage_v",
-        "Tensao (V)",
+        "Tensão (V)",
         re.compile(rf"({_MULTI})\s*V(?:olts)?(?![A-Za-z])", re.IGNORECASE),
     ),
     (
@@ -87,13 +87,13 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
         "Corrente (A)",
         re.compile(rf"({_MULTI})\s*A(?:mp)?(?![A-Za-z])", re.IGNORECASE),
     ),
-    ("frequency_hz", "Frequencia (Hz)", re.compile(r"(\d{2})\s*Hz", re.IGNORECASE)),
+    ("frequency_hz", "Frequência (Hz)", re.compile(r"(\d{2})\s*Hz", re.IGNORECASE)),
     (
         "nominal_rpm",
-        "Rotacao (RPM)",
+        "Rotação (RPM)",
         re.compile(r"(\d{3,4})\s*(?:RPM|r/min|min-?1)", re.IGNORECASE),
     ),
-    ("ip_rating", "Grau de protecao", re.compile(r"(IP\s?\d{2})", re.IGNORECASE)),
+    ("ip_rating", "Grau de proteção", re.compile(r"(IP\s?\d{2})", re.IGNORECASE)),
     (
         "insulation_class",
         "Classe de isolamento",
@@ -101,7 +101,7 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
     (
         "service_factor",
-        "Fator de servico",
+        "Fator de serviço",
         re.compile(
             r"(?:F\.?\s?S\.?|FATOR\s*DE\s*SERVI\w*|SERVICE\s*FACTOR)\s*[:.]?\s*"
             r"([01][.,]\d{1,2})",
@@ -110,7 +110,7 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
     (
         "power_factor",
-        "Fator de potencia",
+        "Fator de potência",
         re.compile(
             r"(?:F\.?\s?P\.?|COS\s*[O0]?|POWER\s*FACTOR)\s*[:.]?\s*(0[.,]\d{1,2})",
             re.IGNORECASE,
@@ -165,7 +165,7 @@ def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[Parsed
             fields.append(
                 ParsedField(
                     "power_kw",
-                    "Potencia (kW)",
+                    "Potência (kW)",
                     f"{kw:.1f}".replace(".", ","),
                     round(base_confidence - 0.15, 2),
                 )
@@ -202,7 +202,7 @@ _GENERIC_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
     (
         "serial_number",
-        "Numero de serie",
+        "Número de série",
         re.compile(
             r"(?:SERIAL|S[ÉE]RIE|N[º°.]?\s*S[ÉE]RIE|SERIAL\s*(?:NO|N[º°]))"
             r"\s*[:.]?\s*\n?\s*([A-Za-z0-9][\w./\-]{2,40})",
@@ -211,7 +211,7 @@ _GENERIC_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
     (
         "manufacture_date",
-        "Data de fabricacao",
+        "Data de fabricação",
         re.compile(
             r"(?:DATE|DATA)\s*[:.]?\s*\n?\s*(\d{1,2}[/.\-]\d{2,4}|\d{4})",
             re.IGNORECASE,

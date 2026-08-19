@@ -106,7 +106,7 @@ async def test_happy_path_abre_ordem_de_servico(client, timeseries_sessionmaker)
     assert b2["work_order"] is not None
     assert b2["work_order"]["number"] == "MTR-2291-OS001"
     assert b2["diagnosis"]["confidence"] >= 0.5
-    assert "ordem de servico" in b2["message"].lower()
+    assert "ordem de serviço" in b2["message"].lower()
 
     # a OS foi persistida de verdade
     orders = await client.get("/api/v1/volt/work-orders?tag=MTR-2291")
@@ -153,7 +153,7 @@ async def test_ativo_critico_sempre_handoff(client, timeseries_sessionmaker):
     b2 = r2.json()
     assert b2["work_order"] is None
     assert b2["handoff"] is not None
-    assert "critico" in b2["handoff"]["reason"].lower()
+    assert "crítico" in b2["handoff"]["reason"].lower()
 
 
 async def test_pedido_explicito_de_humano(client):
@@ -165,4 +165,4 @@ async def test_pedido_explicito_de_humano(client):
     )
     b2 = r2.json()
     assert b2["handoff"] is not None
-    assert "solicitacao" in b2["handoff"]["reason"].lower()
+    assert "solicitação" in b2["handoff"]["reason"].lower()

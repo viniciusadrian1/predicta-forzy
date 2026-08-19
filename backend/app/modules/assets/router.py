@@ -79,7 +79,7 @@ async def create_asset(
     except AssetAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Ja existe um ativo com a TAG '{exc}'",
+            detail=f"Já existe um ativo com a TAG '{exc}'",
         ) from exc
 
 
@@ -90,7 +90,7 @@ async def get_asset(tag: str, service: AssetService = Depends(get_asset_service)
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ativo '{tag}' nao encontrado",
+            detail=f"Ativo '{tag}' não encontrado",
         ) from exc
 
 
@@ -105,7 +105,7 @@ async def update_asset(
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ativo '{tag}' nao encontrado",
+            detail=f"Ativo '{tag}' não encontrado",
         ) from exc
 
 
@@ -118,7 +118,7 @@ async def delete_asset(tag: str, service: AssetService = Depends(get_asset_servi
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ativo '{tag}' nao encontrado",
+            detail=f"Ativo '{tag}' não encontrado",
         ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -153,7 +153,7 @@ async def create_area(payload: AreaIn, service: AssetService = Depends(get_asset
     except PlantNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Planta '{exc}' nao encontrada",
+            detail=f"Planta '{exc}' não encontrada",
         ) from exc
 
 
@@ -167,7 +167,7 @@ async def plant_smart_pdf(
     asset_repo = AssetRepository(catalog)
     plant = await asset_repo.get_plant(plant_id)
     if plant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planta nao encontrada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planta não encontrada")
     plant_assets = await asset_repo.search_assets(plant_id=plant_id)
     telemetry_repo = TelemetryRepository(timeseries)
     latest_by_tag = {asset.tag: await telemetry_repo.latest(asset.tag) for asset in plant_assets}

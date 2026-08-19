@@ -34,14 +34,16 @@ from app.modules.volt.schemas import (
 logger = logging.getLogger("forzy.volt")
 
 BOT_NAME = "Volt"
-SYMPTOM_CHIPS = ["Vibracao", "Ruido", "Temperatura"]
-_SYMPTOM_LABEL = {"vibracao": "vibracao", "ruido": "ruido", "temperatura": "temperatura"}
+SYMPTOM_CHIPS = ["Vibração", "Ruído", "Temperatura"]
+# Chave (do detect_symptom) -> rótulo exibido/armazenado. A chave permanece sem
+# acento (usada na lógica); o rótulo é o texto que o usuário vê.
+_SYMPTOM_LABEL = {"vibracao": "vibração", "ruido": "ruído", "temperatura": "temperatura"}
 
 GREETING = (
-    "Ola! Sou o Volt, assistente de manutencao da Forzy. Eu identifico o ativo, "
-    "leio os sensores e abro a ordem de servico quando o diagnostico e confiavel "
-    "- casos delicados eu encaminho para um tecnico humano. Para comecar, qual e "
-    "o codigo do ativo? (Ex: MTR-2291)"
+    "Olá! Sou o Volt, assistente de manutenção da Forzy. Eu identifico o ativo, "
+    "leio os sensores e abro a ordem de serviço quando o diagnóstico é confiável "
+    "— casos delicados eu encaminho para um técnico humano. Para começar, qual é "
+    "o código do ativo? (Ex: MTR-2291)"
 )
 
 
@@ -78,7 +80,7 @@ class VoltService:
 
         # Pedido explicito de humano, em qualquer etapa (guardrail / handoff).
         if message and wants_human(message) and state.step not in ("handoff", "concluido"):
-            return self._handoff(state, reason="Solicitacao explicita do tecnico.")
+            return self._handoff(state, reason="Solicitação explícita do técnico.")
 
         if state.step in ("concluido", "handoff"):
             reply = self._restart(state, message)
@@ -97,7 +99,7 @@ class VoltService:
         code = extract_asset_code(message)
         if code is None:
             return VoltReply(
-                message="Nao consegui identificar o codigo. Informe o codigo do "
+                message="Não consegui identificar o código. Informe o código do "
                 "ativo, por favor. (Ex: MTR-2291)",
                 state=state,
             )
@@ -105,14 +107,14 @@ class VoltService:
         asset = await self._assets.get_asset_by_tag(code)
         if asset is None:
             state.not_found_attempts += 1
-            # 2a falha na conferencia -> handoff (rota de fuga humana).
+            # 2a falha na conferência -> handoff (rota de fuga humana).
             if state.not_found_attempts >= 2:
                 state.asset_tag = code
-                return self._handoff(state, reason=f"Ativo {code} nao localizado apos conferencia.")
+                return self._handoff(state, reason=f"Ativo {code} não localizado após conferência.")
             return VoltReply(
-                message=f"Nao encontrei o ativo {code} no sistema. Pode conferir o "
-                "codigo na etiqueta do equipamento? Se preferir, posso te "
-                "transferir agora para o suporte da manutencao.",
+                message=f"Não encontrei o ativo {code} no sistema. Pode conferir o "
+                "código na etiqueta do equipamento? Se preferir, posso te "
+                "transferir agora para o suporte da manutenção.",
                 state=state,
                 quick_replies=["Falar com humano"],
             )
@@ -122,8 +124,8 @@ class VoltService:
         state.not_found_attempts = 0
         state.step = "aguardando_sintoma"
         return VoltReply(
-            message=f"Ativo localizado: {state.asset_name}. Qual sintoma voce esta "
-            "observando - vibracao, ruido ou temperatura?",
+            message=f"Ativo localizado: {state.asset_name}. Qual sintoma você está "
+            "observando — vibração, ruído ou temperatura?",
             state=state,
             quick_replies=SYMPTOM_CHIPS,
         )
@@ -132,8 +134,8 @@ class VoltService:
         symptom = detect_symptom(message)
         if symptom is None:
             return VoltReply(
-                message="Qual desses sintomas melhor descreve o problema: vibracao, "
-                "ruido ou temperatura?",
+                message="Qual desses sintomas melhor descreve o problema: vibração, "
+                "ruído ou temperatura?",
                 state=state,
                 quick_replies=SYMPTOM_CHIPS,
             )
@@ -146,20 +148,20 @@ class VoltService:
         readings = {row["variable"]: float(row["value"]) for row in latest}
         dx = diagnose(symptom, readings)
 
-        # Ativo critico: sempre revisao humana, mesmo com alta confianca.
+        # Ativo crítico: sempre revisão humana, mesmo com alta confiança.
         if state.asset_tag in self._critical:
             return self._handoff(
                 state,
-                reason="Ativo classificado como critico para a producao.",
+                reason="Ativo classificado como crítico para a produção.",
                 diagnosis=dx.fault,
                 confidence=dx.confidence,
             )
 
-        # Confianca abaixo do limiar: escala para um humano.
+        # Confiança abaixo do limiar: escala para um humano.
         if dx.confidence < self._settings.volt_confidence_threshold:
             return self._handoff(
                 state,
-                reason=f"Confianca do diagnostico abaixo de "
+                reason=f"Confiança do diagnóstico abaixo de "
                 f"{int(self._settings.volt_confidence_threshold * 100)}%.",
                 diagnosis=dx.fault,
                 confidence=dx.confidence,
@@ -190,9 +192,9 @@ class VoltService:
             readings=dx.readings if detailed else None,
         )
         return VoltReply(
-            message=f"Diagnostico automatico: {dx.fault.lower()}, com "
-            f"{int(dx.confidence * 100)}% de confianca. Ja abri a ordem de servico "
-            f"{number} com prioridade {priority}. A equipe deve chegar em ate 30 minutos.",
+            message=f"Diagnóstico automático: {dx.fault.lower()}, com "
+            f"{int(dx.confidence * 100)}% de confiança. Já abri a ordem de serviço "
+            f"{number} com prioridade {priority}. A equipe deve chegar em até 30 minutos.",
             state=state,
             diagnosis=diagnosis_out,
             work_order=WorkOrderOut.model_validate(order),
@@ -214,31 +216,31 @@ class VoltService:
             symptom=state.symptom,
             diagnosis=diagnosis,
             confidence=round(confidence, 2) if confidence is not None else None,
-            actions_taken="Nenhuma ordem de servico aberta ainda.",
+            actions_taken="Nenhuma ordem de serviço aberta ainda.",
             reason=reason,
         )
         return VoltReply(
-            message="Vou te transferir para um tecnico da manutencao com o resumo do "
-            "atendimento - voce nao precisa repetir nada. Motivo: " + reason.lower(),
+            message="Vou te transferir para um técnico da manutenção com o resumo do "
+            "atendimento — você não precisa repetir nada. Motivo: " + reason.lower(),
             state=state,
             handoff=summary,
             done=True,
         )
 
     def _restart(self, state: VoltStateModel, message: str) -> VoltReply:
-        """Apos concluir/encaminhar, um novo codigo reinicia o atendimento."""
+        """Após concluir/encaminhar, um novo código reinicia o atendimento."""
         fresh = VoltStateModel(step="aguardando_ativo")
         if message and extract_asset_code(message):
             return VoltReply.model_validate(
                 {
                     **greeting_reply().model_dump(),
-                    "message": "Vamos la, novo atendimento.",
+                    "message": "Vamos lá, novo atendimento.",
                     "state": fresh,
                 }
             )
         return VoltReply(
             message="Atendimento encerrado. Para registrar outro ativo, informe o "
-            "codigo. (Ex: MTR-2291)",
+            "código. (Ex: MTR-2291)",
             state=fresh,
         )
 

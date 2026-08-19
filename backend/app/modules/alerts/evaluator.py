@@ -93,7 +93,7 @@ class AlertsEvaluator:
                     (
                         "WARNING",
                         "BASELINE_DEVIATION",
-                        "Desvio do baseline de operacao detectado pelo modelo",
+                        "Desvio do baseline de operação detectado pelo modelo",
                         baseline.score,
                     )
                 )
@@ -103,7 +103,7 @@ class AlertsEvaluator:
                     (
                         "WARNING",
                         "ANOMALY_DETECTED",
-                        "Anomalia de vibracao detectada (autoencoder)",
+                        "Anomalia de vibração detectada (autoencoder)",
                         anomaly.reconstruction_error,
                     )
                 )
@@ -114,7 +114,7 @@ class AlertsEvaluator:
                     (
                         severity,
                         "RUL_WARNING",
-                        f"RUL estimado em {rul.rul_days:.0f} dias - planejar manutencao",
+                        f"RUL estimado em {rul.rul_days:.0f} dias — planejar manutenção",
                         None,
                     )
                 )
@@ -155,7 +155,7 @@ class AlertsEvaluator:
                     (
                         "CRITICAL",
                         "THRESHOLD_EXCEEDED",
-                        f"Vibracao critica: {vibration:.2f} mm/s",
+                        f"Vibração crítica: {vibration:.2f} mm/s",
                         None,
                     )
                 )
@@ -164,7 +164,7 @@ class AlertsEvaluator:
                     (
                         "WARNING",
                         "THRESHOLD_EXCEEDED",
-                        f"Vibracao elevada: {vibration:.2f} mm/s",
+                        f"Vibração elevada: {vibration:.2f} mm/s",
                         None,
                     )
                 )
@@ -175,7 +175,7 @@ class AlertsEvaluator:
                     (
                         "CRITICAL",
                         "THRESHOLD_EXCEEDED",
-                        f"Temperatura critica: {temperature:.1f} C",
+                        f"Temperatura crítica: {temperature:.1f} °C",
                         None,
                     )
                 )
@@ -184,7 +184,7 @@ class AlertsEvaluator:
                     (
                         "WARNING",
                         "THRESHOLD_EXCEEDED",
-                        f"Temperatura elevada: {temperature:.1f} C",
+                        f"Temperatura elevada: {temperature:.1f} °C",
                         None,
                     )
                 )

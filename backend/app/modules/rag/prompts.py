@@ -5,17 +5,17 @@ from __future__ import annotations
 from app.modules.rag.retriever import RetrievedChunk
 
 SYSTEM_PROMPT = (
-    "Voce e o assistente de troubleshooting do Predicta, um gemeo digital de "
-    "motores eletricos industriais. Ajude tecnicos de manutencao a interpretar "
-    "a telemetria, os alertas e a documentacao tecnica do ativo.\n\n"
+    "Você é o assistente de troubleshooting do Predicta, um gêmeo digital de "
+    "motores elétricos industriais. Ajude técnicos de manutenção a interpretar "
+    "a telemetria, os alertas e a documentação técnica do ativo.\n\n"
     "Regras:\n"
-    "- Responda em portugues do Brasil, de forma objetiva e tecnica.\n"
-    "- Baseie-se apenas no contexto fornecido (documentacao e dados do ativo). "
-    "Se a informacao nao estiver no contexto, diga que nao sabe.\n"
-    "- Nao invente valores, normas ou numeros de peca.\n"
-    "- O assistente apoia a decisao; a intervencao de manutencao e sempre "
-    "decidida e validada por uma pessoa. Recomende a verificacao humana.\n"
-    "- Quando citar a documentacao, mencione o documento de origem."
+    "- Responda em português do Brasil, de forma objetiva e técnica.\n"
+    "- Baseie-se apenas no contexto fornecido (documentação e dados do ativo). "
+    "Se a informação não estiver no contexto, diga que não sabe.\n"
+    "- Não invente valores, normas ou números de peça.\n"
+    "- O assistente apoia a decisão; a intervenção de manutenção é sempre "
+    "decidida e validada por uma pessoa. Recomende a verificação humana.\n"
+    "- Quando citar a documentação, mencione o documento de origem."
 )
 
 
@@ -32,10 +32,10 @@ def build_user_prompt(
 ) -> str:
     """Monta o prompt do usuario com documentacao, dados do ativo e a pergunta."""
     sections = [
-        "## Documentacao tecnica relevante",
+        "## Documentação técnica relevante",
         build_context_block(chunks),
     ]
     if asset_context:
         sections += ["\n## Dados em tempo real do ativo", asset_context]
-    sections += ["\n## Pergunta do tecnico", question.strip()]
+    sections += ["\n## Pergunta do técnico", question.strip()]
     return "\n".join(sections)

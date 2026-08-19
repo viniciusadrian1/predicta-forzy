@@ -78,7 +78,7 @@ class RpaService:
         created = False
         if extraction.engine == "indisponivel":
             message = (
-                "OCR indisponivel no servidor - nenhum dado extraido. "
+                "OCR indisponível no servidor - nenhum dado extraído. "
                 "Preencha os campos manualmente."
             )
         elif not extraction.fields:
@@ -92,7 +92,7 @@ class RpaService:
             existing = await self._repo.get_asset_by_tag(tag)
             if existing is not None:
                 duplicate = True
-                message = f"Ja existe um ativo com a TAG '{tag}' (cadastro ignorado)."
+                message = f"Já existe um ativo com a TAG '{tag}' (cadastro ignorado)."
             elif auto_create:
                 await self._repo.add_asset(
                     Asset(

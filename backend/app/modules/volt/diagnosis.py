@@ -52,9 +52,9 @@ def diagnose(
 
     if not readings:
         return Diagnosis(
-            fault="Sem dados de sensor para diagnostico",
+            fault="Sem dados de sensor para diagnóstico",
             confidence=0.2,
-            evidence="Nao ha telemetria recente do ativo.",
+            evidence="Não há telemetria recente do ativo.",
             readings={},
         )
 
@@ -64,47 +64,47 @@ def diagnose(
         if temperature >= TEMP_CRITICAL:
             fault = "Sobreaquecimento" + (" por sobrecarga" if overloaded else "")
             conf = 0.7 + min((temperature - TEMP_CRITICAL) / 40.0, 0.2)
-            ev = f"Temperatura {temperature:.1f} C" + (
+            ev = f"Temperatura {temperature:.1f} °C" + (
                 f" com corrente {current:.1f} A (sobrecarga)" if overloaded else ""
             )
         elif temperature >= TEMP_WARNING:
             fault = "Aquecimento acima do normal"
             conf = 0.55
-            ev = f"Temperatura {temperature:.1f} C, acima da faixa de operacao."
+            ev = f"Temperatura {temperature:.1f} °C, acima da faixa de operação."
         else:
             fault = "Temperatura dentro do esperado"
             conf = 0.35
-            ev = f"Temperatura {temperature:.1f} C, dentro da faixa normal."
+            ev = f"Temperatura {temperature:.1f} °C, dentro da faixa normal."
         return Diagnosis(fault, _reinforce(conf, anomaly_score), ev, readings)
 
-    # ---- Sintomas de vibracao / ruido (assinatura vibratoria) ----
+    # ---- Sintomas de vibração / ruído (assinatura vibratória) ----
     if symptom in ("vibracao", "ruido") and velocity is not None:
         accel_val = accel if accel is not None else 0.0
-        # Aceleracao dominante -> defeito de rolamento (alta frequencia).
+        # Aceleração dominante -> defeito de rolamento (alta frequência).
         if accel_val >= ACCEL_CRITICAL:
             fault = "Desgaste de rolamento"
             conf = 0.75 + min((accel_val - ACCEL_CRITICAL) / 3.0, 0.15)
-            ev = f"Aceleracao {accel_val:.2f} g elevada (defeito de alta frequencia)."
+            ev = f"Aceleração {accel_val:.2f} g elevada (defeito de alta frequência)."
         elif velocity >= VEL_CRITICAL:
-            # Velocidade muito alta com aceleracao moderada -> desalinhamento.
+            # Velocidade muito alta com aceleração moderada -> desalinhamento.
             fault = "Desalinhamento do eixo"
             conf = 0.7 + min((velocity - VEL_CRITICAL) / 6.0, 0.18)
             ev = f"Velocidade {velocity:.2f} mm/s RMS (zona D, ISO 10816)."
         elif velocity >= VEL_WARNING or accel_val >= ACCEL_WARNING:
-            fault = "Desbalanceamento ou folga mecanica"
+            fault = "Desbalanceamento ou folga mecânica"
             conf = 0.55
-            ev = f"Velocidade {velocity:.2f} mm/s / aceleracao {accel_val:.2f} g (zona C)."
+            ev = f"Velocidade {velocity:.2f} mm/s / aceleração {accel_val:.2f} g (zona C)."
         else:
-            fault = "Vibracao dentro do esperado"
+            fault = "Vibração dentro do esperado"
             conf = 0.35
-            ev = f"Velocidade {velocity:.2f} mm/s RMS, dentro da faixa aceitavel."
+            ev = f"Velocidade {velocity:.2f} mm/s RMS, dentro da faixa aceitável."
         return Diagnosis(fault, _reinforce(conf, anomaly_score), ev, readings)
 
     # ---- Sem assinatura correspondente ao sintoma ----
     return Diagnosis(
-        fault="Sintoma sem confirmacao nos sensores",
+        fault="Sintoma sem confirmação nos sensores",
         confidence=0.3,
-        evidence="Os sensores disponiveis nao confirmam o sintoma relatado.",
+        evidence="Os sensores disponíveis não confirmam o sintoma relatado.",
         readings=readings,
     )
 
