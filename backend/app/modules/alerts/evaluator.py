@@ -118,7 +118,12 @@ class AlertsEvaluator:
             else:
                 candidates += self._threshold_rules(readings, recent, thresholds)
 
-                baseline = await ml_service.predict_baseline(ts_session, asset_tag)
+                # train_if_missing=False: o avaliador (background) nunca dispara
+                # o treino pesado - so usa modelo ja treinado sob demanda. Evita
+                # picos de CPU/memoria que derrubam o instance no free tier.
+                baseline = await ml_service.predict_baseline(
+                    ts_session, asset_tag, train_if_missing=False
+                )
                 if baseline.available and baseline.decision == "anomalo":
                     candidates.append(
                         (
@@ -128,7 +133,9 @@ class AlertsEvaluator:
                             baseline.score,
                         )
                     )
-                anomaly = await ml_service.predict_anomaly(ts_session, asset_tag)
+                anomaly = await ml_service.predict_anomaly(
+                    ts_session, asset_tag, train_if_missing=False
+                )
                 if anomaly.available and anomaly.is_anomaly:
                     candidates.append(
                         (
@@ -138,7 +145,9 @@ class AlertsEvaluator:
                             anomaly.reconstruction_error,
                         )
                     )
-                rul = await ml_service.estimate_rul(ts_session, asset_tag)
+                rul = await ml_service.estimate_rul(
+                    ts_session, asset_tag, train_if_missing=False
+                )
                 if rul.available and rul.rul_days is not None and rul.rul_days < RUL_WARNING_DAYS:
                     severity = "CRITICAL" if rul.rul_days < RUL_CRITICAL_DAYS else "WARNING"
                     candidates.append(

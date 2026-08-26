@@ -128,7 +128,7 @@ class MlService:
         return wide.dropna(subset=present)
 
     async def _fetch_history(
-        self, session: AsyncSession, asset_tag: str, max_rows: int = 60000
+        self, session: AsyncSession, asset_tag: str, max_rows: int = 5000
     ) -> pd.DataFrame:
         """Historico do ativo em formato wide (por contagem, sem filtro de tempo).
 
@@ -163,7 +163,8 @@ class MlService:
         ``.fit()`` sincrono travava toda a API enquanto treinava.
         """
         features = wide[available].to_numpy(dtype=float)
-        baseline = IsolationForest(n_estimators=120, contamination=0.03, random_state=42)
+        # Modelos enxutos: cabem na memoria/CPU do free tier (512MB / 0.1 vCPU).
+        baseline = IsolationForest(n_estimators=60, contamination=0.03, random_state=42)
         baseline.fit(features)
 
         # Autoencoder de vibracao: so quando ha o sinal de velocidade de vibracao.
@@ -173,7 +174,7 @@ class MlService:
             windows = _make_windows(wide[VIBRATION_VARIABLE].to_numpy(dtype=float), WINDOW_SIZE)
             if len(windows) >= MIN_TRAINING_SAMPLES:
                 autoencoder = MLPRegressor(
-                    hidden_layer_sizes=(8, 4, 8), max_iter=500, random_state=42
+                    hidden_layer_sizes=(8, 4, 8), max_iter=200, random_state=42
                 )
                 autoencoder.fit(windows, windows)
                 errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
@@ -214,8 +215,10 @@ class MlService:
         )
         return True
 
-    async def _ensure(self, session: AsyncSession, asset_tag: str) -> None:
-        if asset_tag in self._bundles:
+    async def _ensure(
+        self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
+    ) -> None:
+        if asset_tag in self._bundles or not train_if_missing:
             return
         # Serializa por ativo e re-checa: so um treino por motor de cada vez.
         lock = self._locks.setdefault(asset_tag, asyncio.Lock())
@@ -223,8 +226,10 @@ class MlService:
             if asset_tag not in self._bundles:
                 await self.train(session, asset_tag)
 
-    async def predict_baseline(self, session: AsyncSession, asset_tag: str) -> BaselinePrediction:
-        await self._ensure(session, asset_tag)
+    async def predict_baseline(
+        self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
+    ) -> BaselinePrediction:
+        await self._ensure(session, asset_tag, train_if_missing=train_if_missing)
         bundle = self._bundles.get(asset_tag)
         if bundle is None:
             return BaselinePrediction(ready=self.ready, available=False, asset_tag=asset_tag)
@@ -250,8 +255,10 @@ class MlService:
             model_version=bundle.version,
         )
 
-    async def predict_anomaly(self, session: AsyncSession, asset_tag: str) -> AnomalyPrediction:
-        await self._ensure(session, asset_tag)
+    async def predict_anomaly(
+        self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
+    ) -> AnomalyPrediction:
+        await self._ensure(session, asset_tag, train_if_missing=train_if_missing)
         bundle = self._bundles.get(asset_tag)
         if bundle is None or bundle.autoencoder is None:
             return AnomalyPrediction(ready=self.ready, available=False, asset_tag=asset_tag)
@@ -282,8 +289,10 @@ class MlService:
             model_version=bundle.version,
         )
 
-    async def estimate_rul(self, session: AsyncSession, asset_tag: str) -> RulEstimate:
-        await self._ensure(session, asset_tag)
+    async def estimate_rul(
+        self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
+    ) -> RulEstimate:
+        await self._ensure(session, asset_tag, train_if_missing=train_if_missing)
         bundle = self._bundles.get(asset_tag)
         version = bundle.version if bundle else None
         wide = await self._fetch_wide(session, asset_tag, minutes=240)
