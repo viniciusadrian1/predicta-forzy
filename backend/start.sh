@@ -6,4 +6,6 @@ set -e
 
 alembic upgrade head
 python -m app.scripts.seed
+# Telemetria real de MTR-F01/F02 (idempotente: nao reimporta se ja houver dado).
+python -m app.scripts.import_history data/history_forzy_iolink.csv
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"

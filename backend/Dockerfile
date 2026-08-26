@@ -20,6 +20,8 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
 COPY start.sh ./
+# Dataset real IO-Link (Forzy) importado no start como telemetria de MTR-F01/F02.
+COPY data ./data
 
 RUN pip install --no-cache-dir ".${PIP_EXTRAS}"
 

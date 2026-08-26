@@ -23,10 +23,10 @@ import sys
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import insert
+from sqlalchemy import func, insert, select
 
-from app.infra.db.base import timeseries_session_factory
-from app.infra.db.timescale import telemetry_processed
+from app.infra.db.base import timeseries_engine, timeseries_session_factory
+from app.infra.db.timescale import init_timeseries_schema, telemetry_processed
 
 # (indice da coluna, variavel canonica, unidade) para cada motor do dataset.
 MOTOR_COLUMNS: dict[str, list[tuple[int, str, str]]] = {
@@ -79,11 +79,36 @@ def _data_rows(path: str) -> list[list[str]]:
     return rows[3:]  # pula as 3 linhas de cabecalho
 
 
-async def import_history(path: str, motors: dict[str, list[tuple[int, str, str]]]) -> int:
-    """Le o CSV e insere as amostras em lotes; devolve o total importado."""
+async def _count_for_tags(session: Any, tags: Any) -> int:
+    """Quantas amostras ja existem para as TAGs alvo (guarda de idempotencia)."""
+    result = await session.execute(
+        select(func.count())
+        .select_from(telemetry_processed)
+        .where(telemetry_processed.c.asset_tag.in_(list(tags)))
+    )
+    return int(result.scalar_one())
+
+
+async def import_history(
+    path: str,
+    motors: dict[str, list[tuple[int, str, str]]],
+    *,
+    ensure_schema: bool = False,
+    skip_if_present: bool = False,
+) -> int:
+    """Le o CSV e insere as amostras em lotes; devolve o total importado.
+
+    ``ensure_schema`` cria as tabelas de telemetria antes de inserir (necessario
+    no start do Render, onde o import roda antes do uvicorn). ``skip_if_present``
+    torna a operacao idempotente: nao reimporta se as TAGs ja tem dado.
+    """
+    if ensure_schema:
+        await init_timeseries_schema(timeseries_engine)
     batch: list[dict[str, Any]] = []
     total = 0
     async with timeseries_session_factory() as session:
+        if skip_if_present and await _count_for_tags(session, motors.keys()) > 0:
+            return 0
         for row in _data_rows(path):
             batch.extend(parse_row(row, motors))
             if len(batch) >= 1000:
@@ -108,8 +133,19 @@ def main() -> None:
     if len(sys.argv) < 2:
         print("uso: python -m app.scripts.import_history <csv> [TAG_M1,TAG_M2]")
         raise SystemExit(1)
-    total = asyncio.run(import_history(sys.argv[1], _motors_from_args(sys.argv)))
-    print(f"Importadas {total} amostras de {sys.argv[1]}")
+    # Idempotente por padrao: garante o schema e nao reimporta se ja houver dado.
+    total = asyncio.run(
+        import_history(
+            sys.argv[1],
+            _motors_from_args(sys.argv),
+            ensure_schema=True,
+            skip_if_present=True,
+        )
+    )
+    if total:
+        print(f"Importadas {total} amostras de {sys.argv[1]}")
+    else:
+        print("Telemetria ja presente - importacao ignorada (idempotente).")
 
 
 if __name__ == "__main__":
