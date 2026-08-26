@@ -19,6 +19,7 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
+COPY start.sh ./
 
 RUN pip install --no-cache-dir ".${PIP_EXTRAS}"
 
