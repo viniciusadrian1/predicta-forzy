@@ -1,0 +1,104 @@
+# Render Blueprint — Predicta (site de testes do grupo).
+#
+# Cria 3 recursos num deploy so:
+#   - predicta-forzy-db        -> PostgreSQL gerenciado (free)
+#   - predicta-forzy-backend   -> FastAPI (Docker) + workers
+#   - predicta-forzy-frontend  -> Next.js
+#
+# TimescaleDB e OPCIONAL: o Postgres do Render nao tem a extensao, entao o
+# backend cai automaticamente para "Postgres simples" (as tabelas de telemetria
+# funcionam como tabelas comuns). O mesmo banco serve catalogo + telemetria.
+#
+# IMPORTANTE (ajustar se o Render mudar os nomes/URLs):
+#   As URLs cruzadas (CORS_ORIGINS e NEXT_PUBLIC_API_URL) assumem os nomes de
+#   servico abaixo. Se o Render adicionar um sufixo aleatorio (nome ja em uso),
+#   corrija as duas variaveis no dashboard depois do 1o deploy.
+
+databases:
+  - name: predicta-forzy-db
+    databaseName: predicta
+    user: predicta
+    plan: free
+
+services:
+  # ----------------------- Backend (FastAPI / Docker) -----------------------
+  - type: web
+    name: predicta-forzy-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    # Roda as migracoes + o seed (idempotente) antes de cada deploy.
+    preDeployCommand: "alembic upgrade head && python -m app.scripts.seed"
+    envVars:
+      # Mantem o login-demo do grupo (o guard de producao NAO dispara em development).
+      - key: ENVIRONMENT
+        value: development
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RAG_VECTOR_BACKEND
+        value: memory
+      - key: EXTERNAL_SENSORS_BASE_URL
+        value: ""
+      # Origem do frontend (CORS). Ajuste se a URL do front for outra.
+      - key: CORS_ORIGINS
+        value: https://predicta-forzy-frontend.onrender.com
+      # --- Postgres (catalogo) ---
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: predicta-forzy-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: predicta-forzy-db
+          property: port
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: predicta-forzy-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: predicta-forzy-db
+          property: password
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: predicta-forzy-db
+          property: database
+      # --- Telemetria -> MESMO Postgres (Timescale opcional) ---
+      - key: TIMESCALE_HOST
+        fromDatabase:
+          name: predicta-forzy-db
+          property: host
+      - key: TIMESCALE_PORT
+        fromDatabase:
+          name: predicta-forzy-db
+          property: port
+      - key: TIMESCALE_USER
+        fromDatabase:
+          name: predicta-forzy-db
+          property: user
+      - key: TIMESCALE_PASSWORD
+        fromDatabase:
+          name: predicta-forzy-db
+          property: password
+      - key: TIMESCALE_DB
+        fromDatabase:
+          name: predicta-forzy-db
+          property: database
+
+  # ----------------------- Frontend (Next.js nativo) -----------------------
+  - type: web
+    name: predicta-forzy-frontend
+    runtime: node
+    rootDir: frontend
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # URL publica do backend (fica "assada" no build do Next). Ajuste se a
+      # URL do backend for outra.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://predicta-forzy-backend.onrender.com

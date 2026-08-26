@@ -64,21 +64,36 @@ _RETENTION = (
 
 
 async def init_timeseries_schema(engine: AsyncEngine) -> None:
-    """Cria, de forma idempotente, extensao, hypertables e politicas de retencao."""
-    # Fase 1 (transacional): extensao + tabelas base + hypertables.
+    """Cria o schema de telemetria. Usa TimescaleDB quando disponivel
+    (hypertables + retencao); sem a extensao (ex.: Postgres gerenciado do
+    Render), cai para Postgres simples - as tabelas continuam funcionando como
+    tabelas comuns, so sem particionamento/compressao/retencao automatica.
+    """
+    # Fase 0: tabelas base - sempre criadas (funcionam em Postgres puro).
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
         await conn.run_sync(timeseries_metadata.create_all)
-        for table_name in ("telemetry_raw", "telemetry_processed"):
-            await conn.execute(
-                text(f"SELECT create_hypertable('{table_name}', 'time', " "if_not_exists => TRUE)")
-            )
-    logger.info("Hypertables telemetry_raw / telemetry_processed prontas")
+    logger.info("Tabelas telemetry_raw / telemetry_processed prontas")
 
-    # Fase 2: remove continuous aggregates legados (nao utilizados - reagregavam
-    # a hypertable inteira sem consumidor) e aplica a retencao alinhada a politica
-    # de governanca. Cada instrucao em sua propria transacao para que uma falha
-    # nao derrube as demais.
+    # Fase 1: extensao TimescaleDB (opcional). Sem ela, segue em modo Postgres.
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("TimescaleDB indisponivel (%s) - modo Postgres simples.", exc)
+        return
+
+    # Fase 2: hypertables (so com Timescale).
+    for table_name in ("telemetry_raw", "telemetry_processed"):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(f"SELECT create_hypertable('{table_name}', 'time', if_not_exists => TRUE)")
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Hypertable %s ignorada: %s", table_name, exc)
+    logger.info("Hypertables prontas")
+
+    # Fase 3: remove continuous aggregates legados e aplica a retencao (Timescale).
     for view_name in _LEGACY_AGGREGATES:
         try:
             async with engine.begin() as conn:
