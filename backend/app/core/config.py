@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
+    # URL base do frontend (links clicaveis do PDF inteligente). Vazio = usa a
+    # 1a origem de CORS; util quando front e API tem dominios diferentes.
+    frontend_base_url: str = ""
 
     # --- LLM (chat de troubleshooting com RAG) ---
     # provider "openai" | "anthropic". Sem a chave do provider, o chat cai no
@@ -171,6 +174,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def resolved_frontend_base_url(self) -> str:
+        """URL do frontend para links do PDF: explicita, 1a origem CORS, ou local."""
+        if self.frontend_base_url:
+            return self.frontend_base_url.rstrip("/")
+        origins = self.cors_origins_list
+        return origins[0].rstrip("/") if origins else "http://localhost:3000"
 
 
 @lru_cache

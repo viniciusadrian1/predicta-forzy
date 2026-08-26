@@ -87,6 +87,10 @@ class AlertsEvaluator:
     async def evaluate(self, asset_tag: str) -> list[Alert]:
         """Avalia um ativo (regras + ML) e cria os alertas necessarios."""
         candidates: list[Candidate] = []
+        # 'physical' = condicao MEDIDA neste ciclo (circuit breaker + limiares).
+        # E o que define o status/badge do ativo. Os alertas de ML sao advisory:
+        # entram na lista de alertas, mas NAO prendem o badge em critico.
+        physical: list[Candidate] = []
 
         # Limiares por ativo (contrato de metricas); nulos -> globais ISO.
         async with catalog_session_factory() as cat_session:
@@ -107,7 +111,7 @@ class AlertsEvaluator:
             # automatico e retem a decisao para revisao humana.
             breaker = self._circuit_breaker(readings, qualities, recent)
             if breaker is not None:
-                candidates.append(
+                physical.append(
                     (
                         "WARNING",
                         "CIRCUIT_BREAKER",
@@ -116,7 +120,7 @@ class AlertsEvaluator:
                     )
                 )
             else:
-                candidates += self._threshold_rules(readings, recent, thresholds)
+                physical += self._threshold_rules(readings, recent, thresholds)
 
                 # train_if_missing=False: o avaliador (background) nunca dispara
                 # o treino pesado - so usa modelo ja treinado sob demanda. Evita
@@ -159,6 +163,9 @@ class AlertsEvaluator:
                         )
                     )
 
+        # Todos (fisicos + ML) viram alertas; so os fisicos definem o status.
+        candidates = physical + candidates
+
         created: list[Alert] = []
         async with catalog_session_factory() as cat_session:
             repo = AlertRepository(cat_session)
@@ -183,7 +190,7 @@ class AlertsEvaluator:
                     extra={"event": "alert_created", "asset_tag": asset_tag},
                 )
                 await self._notify(alert)
-            await self._sync_asset_status(asset_tag, cat_session, repo)
+            await self._sync_asset_status(asset_tag, cat_session, physical)
         return created
 
     async def _notify(self, alert: Alert) -> None:
@@ -331,10 +338,16 @@ class AlertsEvaluator:
         return []
 
     async def _sync_asset_status(
-        self, asset_tag: str, session: AsyncSession, repo: AlertRepository
+        self, asset_tag: str, session: AsyncSession, physical: list[Candidate]
     ) -> None:
-        """Sincroniza o status do ativo com a severidade dos alertas ativos."""
-        severities = await repo.active_severities(asset_tag)
+        """Status do ativo = condicao fisica MEDIDA neste ciclo.
+
+        Antes usava os alertas historicos nao-reconhecidos: um unico pico
+        antigo prendia o badge em 'critico' para sempre. Agora reflete a
+        leitura atual (limiares + circuit breaker); os alertas de ML nao
+        entram no badge (sao advisory na aba de saude do ativo).
+        """
+        severities = {candidate[0] for candidate in physical}
         if "CRITICAL" in severities:
             status = "critical"
         elif "WARNING" in severities:

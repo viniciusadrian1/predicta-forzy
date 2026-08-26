@@ -27,6 +27,7 @@ from app.modules.assets.service import (
     AssetService,
     PlantNotFoundError,
 )
+from app.core.config import get_settings
 from app.modules.assets.smart_pdf import build_plant_pdf
 from app.modules.telemetry.repository import TelemetryRepository
 
@@ -202,7 +203,9 @@ async def plant_smart_pdf(
     plant_assets = await asset_repo.search_assets(plant_id=plant_id)
     telemetry_repo = TelemetryRepository(timeseries)
     latest_by_tag = {asset.tag: await telemetry_repo.latest(asset.tag) for asset in plant_assets}
-    pdf_bytes = build_plant_pdf(plant, plant_assets, latest_by_tag)
+    pdf_bytes = build_plant_pdf(
+        plant, plant_assets, latest_by_tag, get_settings().resolved_frontend_base_url
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

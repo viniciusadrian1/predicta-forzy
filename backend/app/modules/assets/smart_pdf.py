@@ -15,16 +15,22 @@ from reportlab.pdfgen import canvas
 
 from app.modules.assets.models import Asset, Plant
 
-# URL base do frontend usada nos links clicaveis do PDF.
-FRONTEND_BASE_URL = "https://app.forzy.local"
+# Fallback se o chamador nao informar a URL do frontend.
+_DEFAULT_FRONTEND_BASE_URL = "http://localhost:3000"
 
 
 def build_plant_pdf(
     plant: Plant,
     assets: list[Asset],
     latest_by_tag: dict[str, list[dict[str, Any]]],
+    frontend_base_url: str = _DEFAULT_FRONTEND_BASE_URL,
 ) -> bytes:
-    """Gera o PDF interativo da planta e devolve os bytes."""
+    """Gera o PDF interativo da planta e devolve os bytes.
+
+    ``frontend_base_url`` e a base dos links clicaveis (abrem o ativo no
+    frontend real); vem da config (``resolved_frontend_base_url``).
+    """
+    base_url = (frontend_base_url or _DEFAULT_FRONTEND_BASE_URL).rstrip("/")
     buffer = io.BytesIO()
     page = landscape(A4)
     width, height = page
@@ -80,7 +86,7 @@ def build_plant_pdf(
 
         # Link clicavel sobre o equipamento.
         pdf.linkURL(
-            f"{FRONTEND_BASE_URL}/asset/{asset.tag}",
+            f"{base_url}/asset/{asset.tag}",
             (box_x, box_y, box_x + box_w, box_y + box_h),
             relative=0,
             thickness=0,
