@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_role
+from app.core.rbac import Principal, require_role
 from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.assets.models import Area, Asset, Plant
 from app.modules.assets.repository import AssetRepository
@@ -98,10 +98,11 @@ async def get_asset(tag: str, service: AssetService = Depends(get_asset_service)
 async def update_asset(
     tag: str,
     payload: AssetUpdate,
+    principal: Principal = Depends(require_role("operator")),
     service: AssetService = Depends(get_asset_service),
 ) -> Asset:
     try:
-        return await service.update_asset(tag, payload)
+        return await service.update_asset(tag, payload, principal.username, principal.role)
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -109,7 +110,27 @@ async def update_asset(
         ) from exc
 
 
-@router.delete("/assets/{tag}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/assets/{tag}/validate", response_model=AssetOut)
+async def validate_asset(
+    tag: str,
+    principal: Principal = Depends(require_role("engineer")),
+    service: AssetService = Depends(get_asset_service),
+) -> Asset:
+    """Valida manualmente um cadastro (perfil Gestor de Planta ou Admin)."""
+    try:
+        return await service.validate_asset(tag, principal.username)
+    except AssetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ativo '{tag}' não encontrado",
+        ) from exc
+
+
+@router.delete(
+    "/assets/{tag}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("engineer"))],
+)
 async def delete_asset(tag: str, service: AssetService = Depends(get_asset_service)) -> Response:
     # 204 nao tem corpo: devolvemos Response explicito (sem response_model)
     # para compatibilidade com as versoes recentes do FastAPI.
@@ -131,7 +152,12 @@ async def list_plants(
     return await service.list_plants()
 
 
-@router.post("/plants", response_model=PlantOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/plants",
+    response_model=PlantOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def create_plant(
     payload: PlantIn, service: AssetService = Depends(get_asset_service)
 ) -> Plant:
@@ -146,7 +172,12 @@ async def list_areas(
     return await service.list_areas()
 
 
-@router.post("/areas", response_model=AreaOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/areas",
+    response_model=AreaOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def create_area(payload: AreaIn, service: AssetService = Depends(get_asset_service)) -> Area:
     try:
         return await service.create_area(payload)

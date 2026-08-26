@@ -69,6 +69,13 @@ class HandoffSummary(BaseModel):
     reason: str
 
 
+class VoltSource(BaseModel):
+    """Trecho da base de manuais citado numa resposta tecnica do Volt."""
+
+    document_title: str
+    snippet: str
+
+
 class VoltReply(BaseModel):
     """Resposta de um turno do Volt."""
 
@@ -78,4 +85,6 @@ class VoltReply(BaseModel):
     diagnosis: DiagnosisOut | None = None
     work_order: WorkOrderOut | None = None
     handoff: HandoffSummary | None = None
+    # Fontes da base de manuais, quando a resposta veio de uma consulta tecnica.
+    sources: list[VoltSource] = Field(default_factory=list)
     done: bool = False

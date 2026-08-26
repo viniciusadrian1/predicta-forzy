@@ -70,6 +70,26 @@ class TelemetryRepository:
         result = await self._session.execute(stmt)
         return [dict(row) for row in result.mappings().all()]
 
+    async def recent_values(
+        self, asset_tag: str, variable: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """Ultimas ``limit`` leituras de uma variavel (mais recentes primeiro)."""
+        stmt = (
+            select(
+                telemetry_processed.c.time,
+                telemetry_processed.c.value,
+                telemetry_processed.c.quality,
+            )
+            .where(
+                telemetry_processed.c.asset_tag == asset_tag,
+                telemetry_processed.c.variable == variable,
+            )
+            .order_by(telemetry_processed.c.time.desc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [dict(row) for row in result.mappings().all()]
+
     async def latest(self, asset_tag: str) -> list[dict[str, Any]]:
         """Ultima leitura de cada variavel do ativo (via window function)."""
         ranked = (

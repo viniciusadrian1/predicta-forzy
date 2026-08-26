@@ -1,0 +1,9 @@
+{
+  "model": "anomaly_autoencoder_mlp",
+  "version": "v1",
+  "trained_at": "2026-05-17T04:44:50.637393+00:00",
+  "window_size": 32,
+  "n_windows": 96150,
+  "reconstruction_threshold": 0.002995,
+  "artifact": "anomaly_v1.pkl"
+}

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Float, ForeignKey, Integer, String
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infra.db.base import CatalogBase, TimestampMixin, UUIDMixin
@@ -71,6 +71,24 @@ class Asset(UUIDMixin, TimestampMixin, CatalogBase):
     datasheet_url: Mapped[str | None] = mapped_column(String(300))
     # Status operacional: unknown / ok / warning / critical.
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
+
+    # --- Rastreabilidade do cadastro (governanca) ---
+    # Origem do dado do cadastro: humano / ia_gerado / importacao.
+    data_origin: Mapped[str] = mapped_column(String(16), nullable=False, default="humano")
+    registration_photo_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ocr_engine_version: Mapped[str | None] = mapped_column(String(48))
+    ocr_confidence: Mapped[float | None] = mapped_column(Float)
+    validated_by: Mapped[str | None] = mapped_column(String(120))
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    image_source: Mapped[str | None] = mapped_column(String(48))
+    visual_condition: Mapped[str | None] = mapped_column(String(300))
+
+    # --- Limiares por ativo (contrato de metricas por percentil / por motor) ---
+    # Nulos = usa os limiares globais ISO 10816 do avaliador.
+    vib_warning: Mapped[float | None] = mapped_column(Float)
+    vib_critical: Mapped[float | None] = mapped_column(Float)
+    temp_warning: Mapped[float | None] = mapped_column(Float)
+    temp_critical: Mapped[float | None] = mapped_column(Float)
 
     plant: Mapped[Plant | None] = relationship(back_populates="assets")
     area: Mapped[Area | None] = relationship(back_populates="assets")

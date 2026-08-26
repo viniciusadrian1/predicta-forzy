@@ -1,20 +1,22 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, SearchX, ServerCrash } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, BadgeCheck, SearchX, ServerCrash } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
 import { AssetHealth } from "@/components/AssetHealth";
 import { EmptyState } from "@/components/EmptyState";
+import { LineageBadge, TraceabilityCard } from "@/components/Governance";
 import { NextAction } from "@/components/NextAction";
 import { SensorPanel } from "@/components/SensorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, getAsset } from "@/lib/api";
+import { ApiError, getAsset, validateAsset } from "@/lib/api";
+import { canValidate, useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 interface AssetPageProps {
@@ -56,11 +58,20 @@ export default function AssetPage({ params }: AssetPageProps) {
   const router = useRouter();
   usePageTitle(tag);
 
+  const role = useAuth((s) => s.role);
+  const queryClient = useQueryClient();
   const assetQuery = useQuery({
     queryKey: ["asset", tag],
     queryFn: () => getAsset(tag),
   });
   const asset = assetQuery.data;
+
+  const validateMutation = useMutation({
+    mutationFn: () => validateAsset(tag),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["asset", tag] }),
+  });
+  const showValidate =
+    !!asset && canValidate(role) && asset.data_origin === "ia_gerado" && !asset.validated_by;
   const notFound =
     assetQuery.error instanceof ApiError && assetQuery.error.status === 404;
 
@@ -144,6 +155,18 @@ export default function AssetPage({ params }: AssetPageProps) {
               <h1 className="text-2xl font-semibold text-slate-100">{asset.tag}</h1>
               <StatusBadge status={asset.status} />
               <span className="text-slate-400">{asset.name}</span>
+              <LineageBadge asset={asset} />
+              {showValidate && (
+                <Button
+                  variant="outline"
+                  onClick={() => validateMutation.mutate()}
+                  disabled={validateMutation.isPending}
+                  className="ml-auto"
+                >
+                  <BadgeCheck className="h-4 w-4" />
+                  {validateMutation.isPending ? "Validando..." : "Validar cadastro"}
+                </Button>
+              )}
             </div>
 
             <NextAction tag={asset.tag} />
@@ -170,21 +193,25 @@ export default function AssetPage({ params }: AssetPageProps) {
 
             <AssetHealth tag={asset.tag} />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Especificações do ativo</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  {specs.map((row) => (
-                    <div key={row.label} className="flex justify-between gap-4">
-                      <dt className="text-slate-400">{row.label}</dt>
-                      <dd className="text-right text-slate-200">{row.value ?? "--"}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Especificações do ativo</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                    {specs.map((row) => (
+                      <div key={row.label} className="flex justify-between gap-4">
+                        <dt className="text-slate-400">{row.label}</dt>
+                        <dd className="text-right text-slate-200">{row.value ?? "--"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
+
+              <TraceabilityCard asset={asset} />
+            </div>
           </>
         )}
     </AppShell>

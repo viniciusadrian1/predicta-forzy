@@ -13,20 +13,28 @@ log de auditoria; o nivel de detalhe segue o papel do usuario (RBAC).
 from __future__ import annotations
 
 import logging
+import re
 
 from app.core.config import Settings
-from app.core.rbac import has_required_role
+from app.core.rbac import has_required_role, rbac_enforced
 from app.modules.assets.repository import AssetRepository
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.diagnosis import diagnose
 from app.modules.volt.models import WorkOrder
-from app.modules.volt.nlu import detect_symptom, detect_urgency, extract_asset_code, wants_human
+from app.modules.volt.nlu import (
+    detect_symptom,
+    detect_urgency,
+    extract_asset_code,
+    is_question,
+    wants_human,
+)
 from app.modules.volt.repository import WorkOrderRepository
 from app.modules.volt.schemas import (
     DiagnosisOut,
     HandoffSummary,
     VoltReply,
     VoltRequest,
+    VoltSource,
     VoltStateModel,
     WorkOrderOut,
 )
@@ -41,9 +49,10 @@ _SYMPTOM_LABEL = {"vibracao": "vibração", "ruido": "ruído", "temperatura": "t
 
 GREETING = (
     "Olá! Sou o Volt, assistente de manutenção da Forzy. Eu identifico o ativo, "
-    "leio os sensores e abro a ordem de serviço quando o diagnóstico é confiável "
-    "— casos delicados eu encaminho para um técnico humano. Para começar, qual é "
-    "o código do ativo? (Ex: MTR-2291)"
+    "leio os sensores e abro a ordem de serviço quando o diagnóstico é confiável — "
+    "e também respondo dúvidas técnicas consultando os manuais. Casos delicados eu "
+    "encaminho para um técnico humano. Para começar, me passe o código do ativo "
+    "(Ex: MTR-2291) ou faça uma pergunta de manutenção."
 )
 
 
@@ -81,6 +90,13 @@ class VoltService:
         # Pedido explicito de humano, em qualquer etapa (guardrail / handoff).
         if message and wants_human(message) and state.step not in ("handoff", "concluido"):
             return self._handoff(state, reason="Solicitação explícita do técnico.")
+
+        # Duvida tecnica (nem codigo, nem sintoma): consulta os manuais (RAG) sem
+        # perder o estado do atendimento guiado - assistente unificado.
+        if message and self._is_knowledge_query(message):
+            reply = await self._answer_knowledge(state, message)
+            self._audit(reply)
+            return reply
 
         if state.step in ("concluido", "handoff"):
             reply = self._restart(state, message)
@@ -167,6 +183,16 @@ class VoltService:
                 confidence=dx.confidence,
             )
 
+        # Guardrail RBAC: abrir uma OS é uma escrita — exige papel operator+.
+        # (Só bloqueia com o RBAC ativo; com RBAC desligado, mantém o fluxo.)
+        if rbac_enforced() and not has_required_role(self._role, "operator"):
+            return self._handoff(
+                state,
+                reason="Abertura de ordem de serviço requer um operador.",
+                diagnosis=dx.fault,
+                confidence=dx.confidence,
+            )
+
         # Confianca alta: abre a ordem de servico com prioridade automatica.
         priority = self._priority(dx.confidence, dx.fault, detect_urgency(message))
         number = await self._orders.next_number(state.asset_tag)
@@ -200,6 +226,70 @@ class VoltService:
             work_order=WorkOrderOut.model_validate(order),
             done=True,
         )
+
+    # -------------------------- base de manuais --------------------------
+    @staticmethod
+    def _is_knowledge_query(message: str) -> bool:
+        """Dúvida técnica: uma pergunta que não é sintoma nem apenas um código.
+
+        Uma pergunta vira consulta aos manuais mesmo quando o regex de código
+        casa um trecho espúrio da frase ("operar com 30 A" -> COM-30); só segue
+        o fluxo guiado quando a mensagem é essencialmente o próprio código do
+        ativo (ex.: "MTR-001?").
+        """
+        if detect_symptom(message) is not None or not is_question(message):
+            return False
+        code = extract_asset_code(message)
+        if code is not None:
+            alnum_msg = re.sub(r"[^a-z0-9]", "", message.lower())
+            alnum_code = re.sub(r"[^a-z0-9]", "", code.lower())
+            if alnum_msg == alnum_code:  # a mensagem é só o código do ativo
+                return False
+        return True
+
+    async def _answer_knowledge(self, state: VoltStateModel, message: str) -> VoltReply:
+        """Responde uma duvida tecnica pela base de manuais (RAG), citando as fontes."""
+        if not self._settings.feature_rag:
+            return VoltReply(
+                message="A base técnica de manuais não está habilitada neste ambiente. "
+                "Posso diagnosticar um ativo pelos sensores — me passe o código. (Ex: MTR-2291)",
+                state=state,
+            )
+
+        # Import local: evita acoplar o Volt ao RAG no import e respeita o feature flag.
+        from app.modules.rag.schemas import ChatRequest
+        from app.modules.rag.service import rag_service
+
+        asset_context = await self._asset_context(state)
+        try:
+            response = await rag_service.answer(
+                ChatRequest(message=message[:2000], asset_tag=state.asset_tag),
+                asset_context,
+            )
+        except Exception:
+            logger.exception("Volt: falha ao consultar a base de conhecimento")
+            return VoltReply(
+                message="Não consegui consultar os manuais agora. Tente de novo em "
+                "instantes, ou me passe o código do ativo para eu diagnosticar pelos sensores.",
+                state=state,
+            )
+
+        sources = [
+            VoltSource(document_title=source.document_title, snippet=source.snippet)
+            for source in response.sources[:3]
+        ]
+        return VoltReply(message=response.answer, state=state, sources=sources)
+
+    async def _asset_context(self, state: VoltStateModel) -> str | None:
+        """Contexto leve do ativo em atendimento (leituras atuais) para fundamentar."""
+        if not state.asset_tag:
+            return None
+        latest = await self._telemetry.latest(state.asset_tag)
+        lines = [f"Ativo em atendimento: {state.asset_name or state.asset_tag}"]
+        if latest:
+            snapshot = "; ".join(f"{row['variable']}={row['value']}" for row in latest)
+            lines.append(f"Leituras atuais: {snapshot}")
+        return "\n".join(lines)
 
     # ------------------------------ apoio ------------------------------
     def _handoff(

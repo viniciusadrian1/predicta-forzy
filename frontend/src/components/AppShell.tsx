@@ -27,7 +27,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoltWidget } from "@/components/VoltWidget";
 import { getHierarchy } from "@/lib/api";
-import { hasRole, useAuth } from "@/lib/auth";
+import { hasRole, roleLabel, useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const STATUS_DOT: Record<string, string> = {
@@ -96,6 +96,8 @@ interface NavItem {
   match: string[];
   /** Papel mínimo para o item aparecer (ausente = todos). */
   minRole?: "operator" | "engineer" | "admin";
+  /** Lista explícita de papéis (não-linear) — usada para o auditor transversal. */
+  roles?: string[];
 }
 
 interface NavGroup {
@@ -140,7 +142,7 @@ function useNavGroups(): NavGroup[] {
     },
     {
       title: "Assistente",
-      items: [{ href: "/volt", label: "Volt", icon: Wrench, match: ["/volt", "/chat"] }],
+      items: [{ href: "/volt", label: "Volt", icon: Wrench, match: ["/volt"] }],
     },
     {
       title: "Administração",
@@ -157,14 +159,14 @@ function useNavGroups(): NavGroup[] {
           label: "Auditoria",
           icon: Boxes,
           match: ["/admin/audit"],
-          minRole: "admin",
+          roles: ["admin", "auditor"],
         },
         {
           href: "/admin/governance",
           label: "Governança",
           icon: ShieldCheck,
           match: ["/admin/governance"],
-          minRole: "admin",
+          roles: ["admin", "auditor"],
         },
       ],
     },
@@ -182,9 +184,11 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex flex-col gap-4">
       {groups.map((group) => {
         // Filtra por papel só após montar (o role vem do store persistido).
-        const items = group.items.filter(
-          (item) => !item.minRole || (mounted && hasRole(role, item.minRole)),
-        );
+        const items = group.items.filter((item) => {
+          if (item.roles) return mounted && item.roles.includes(role ?? "");
+          if (item.minRole) return mounted && hasRole(role, item.minRole);
+          return true;
+        });
         if (items.length === 0) return null;
         return (
           <div key={group.title}>
@@ -241,7 +245,7 @@ function UserBlock() {
     <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm text-slate-300">{username}</p>
-        <p className="text-xs text-slate-600">{role}</p>
+        <p className="truncate text-xs text-slate-600">{roleLabel(role)}</p>
       </div>
       <button
         type="button"

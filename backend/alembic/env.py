@@ -16,6 +16,7 @@ from app.modules.alerts import models as alerts_models  # noqa: F401
 from app.modules.assets import models as assets_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.governance import models as governance_models  # noqa: F401
+from app.modules.ml import models as ml_models  # noqa: F401
 from app.modules.volt import models as volt_models  # noqa: F401
 
 config = context.config

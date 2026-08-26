@@ -1,0 +1,30 @@
+{
+  "model": "baseline_isolation_forest",
+  "version": "v1",
+  "trained_at": "2026-05-17T04:44:47.021111+00:00",
+  "n_samples": 96181,
+  "n_features": 20,
+  "features": [
+    "voltage_v",
+    "voltage_v_mean",
+    "voltage_v_std",
+    "current_a",
+    "current_a_mean",
+    "current_a_std",
+    "temperature_c",
+    "temperature_c_mean",
+    "temperature_c_std",
+    "rotation_rpm",
+    "rotation_rpm_mean",
+    "rotation_rpm_std",
+    "vibration_velocity_rms",
+    "vibration_velocity_rms_mean",
+    "vibration_velocity_rms_std",
+    "vibration_acceleration_rms",
+    "vibration_acceleration_rms_mean",
+    "vibration_acceleration_rms_std",
+    "vibration_roc",
+    "vibration_spectral"
+  ],
+  "artifact": "baseline_v1.pkl"
+}

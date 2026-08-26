@@ -49,30 +49,22 @@ telemetry_processed = Table(
     Column("quality", Integer),
 )
 
-# Continuous aggregates: (nome da view, intervalo do bucket).
-_CONTINUOUS_AGGREGATES = (
-    ("telemetry_processed_1min", "1 minute"),
-    ("telemetry_processed_5min", "5 minutes"),
-    ("telemetry_processed_1hour", "1 hour"),
+# Continuous aggregates herdados (hoje removidos - ver init_timeseries_schema).
+_LEGACY_AGGREGATES = (
+    "telemetry_processed_1min",
+    "telemetry_processed_5min",
+    "telemetry_processed_1hour",
+)
+
+# Retencao alinhada a politica de governanca/LGPD: bruto 30 dias, processado 1 ano.
+_RETENTION = (
+    ("telemetry_raw", "30 days"),
+    ("telemetry_processed", "365 days"),
 )
 
 
-def _aggregate_sql(view_name: str, bucket: str) -> str:
-    return (
-        f"CREATE MATERIALIZED VIEW IF NOT EXISTS {view_name} "
-        "WITH (timescaledb.continuous) AS "
-        f"SELECT time_bucket(INTERVAL '{bucket}', time) AS bucket, "
-        "asset_tag, variable, "
-        "avg(value) AS avg_value, min(value) AS min_value, "
-        "max(value) AS max_value, count(*) AS sample_count "
-        "FROM telemetry_processed "
-        "GROUP BY bucket, asset_tag, variable "
-        "WITH NO DATA"
-    )
-
-
 async def init_timeseries_schema(engine: AsyncEngine) -> None:
-    """Cria, de forma idempotente, extensao, hypertables e continuous aggregates."""
+    """Cria, de forma idempotente, extensao, hypertables e politicas de retencao."""
     # Fase 1 (transacional): extensao + tabelas base + hypertables.
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
@@ -83,20 +75,25 @@ async def init_timeseries_schema(engine: AsyncEngine) -> None:
             )
     logger.info("Hypertables telemetry_raw / telemetry_processed prontas")
 
-    # Fase 2 (autocommit): continuous aggregates nao podem rodar em transacao.
-    async with engine.connect() as raw_conn:
-        conn = raw_conn.execution_options(isolation_level="AUTOCOMMIT")
-        for view_name, bucket in _CONTINUOUS_AGGREGATES:
-            try:
-                await conn.execute(text(_aggregate_sql(view_name, bucket)))
+    # Fase 2: remove continuous aggregates legados (nao utilizados - reagregavam
+    # a hypertable inteira sem consumidor) e aplica a retencao alinhada a politica
+    # de governanca. Cada instrucao em sua propria transacao para que uma falha
+    # nao derrube as demais.
+    for view_name in _LEGACY_AGGREGATES:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Nao foi possivel remover o aggregate %s: %s", view_name, exc)
+    for table_name, keep in _RETENTION:
+        try:
+            async with engine.begin() as conn:
                 await conn.execute(
                     text(
-                        f"SELECT add_continuous_aggregate_policy('{view_name}', "
-                        "start_offset => NULL, end_offset => NULL, "
-                        "schedule_interval => INTERVAL '1 minute', "
-                        "if_not_exists => TRUE)"
+                        f"SELECT add_retention_policy('{table_name}', "
+                        f"INTERVAL '{keep}', if_not_exists => TRUE)"
                     )
                 )
-            except Exception as exc:  # noqa: BLE001 - aggregates sao otimizacao
-                logger.warning("Continuous aggregate %s ignorado: %s", view_name, exc)
-    logger.info("Continuous aggregates configurados")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Retencao de %s ignorada: %s", table_name, exc)
+    logger.info("Aggregates legados removidos; politicas de retencao aplicadas")

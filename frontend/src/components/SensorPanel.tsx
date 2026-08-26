@@ -2,13 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Download } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { TelemetryChart } from "@/components/TelemetryChart";
 import { Card } from "@/components/ui/card";
 import { getTelemetry, telemetryCsvUrl } from "@/lib/api";
+import { isAuditor, useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { TelemetryPoint } from "@/types";
+
+// Alem deste tempo sem leitura nova, a telemetria e considerada "SEM LEITURA".
+const STALE_MS = 120_000;
 
 const WINDOWS = [
   { key: "1h", label: "1h", hours: 1 },
@@ -89,6 +93,15 @@ export function SensorPanel({
   const points = query.data?.points ?? [];
   const current = points.length > 0 ? points[points.length - 1] : null;
 
+  // Governanca: o auditor ve a telemetria mascarada (minimizacao de dados);
+  // o disclaimer de temporalidade (AO VIVO / SEM LEITURA) e visivel a todos.
+  const role = useAuth((s) => s.role);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const masked = mounted && isAuditor(role);
+  const stale =
+    mounted && (!current || Date.now() - new Date(current.time).getTime() > STALE_MS);
+
   // Leitura colorida por severidade (padrão de sala de controle).
   const valueClass =
     current && crit !== undefined && current.value >= crit
@@ -101,9 +114,22 @@ export function SensorPanel({
     <Card className="p-4">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-slate-400">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-slate-400">{label}</p>
+            {mounted &&
+              (stale ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-950/40 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
+                  SEM LEITURA
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/40 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  AO VIVO
+                </span>
+              ))}
+          </div>
           <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueClass}`}>
-            {current ? current.value.toLocaleString("pt-BR") : "--"}
+            {masked ? "***" : current ? current.value.toLocaleString("pt-BR") : "--"}
             <span className="ml-1 text-sm font-normal text-slate-500">{unit}</span>
           </p>
         </div>
@@ -121,7 +147,14 @@ export function SensorPanel({
         </button>
       </div>
 
-      {!expanded && <Sparkline points={points} color={color} />}
+      {!expanded &&
+        (masked ? (
+          <p className="mt-2 flex h-10 items-center text-xs text-slate-600">
+            Telemetria mascarada (perfil auditor).
+          </p>
+        ) : (
+          <Sparkline points={points} color={color} />
+        ))}
 
       {expanded && (
         <div className="mt-3">
@@ -152,7 +185,13 @@ export function SensorPanel({
               CSV
             </a>
           </div>
-          <TelemetryChart points={points} unit={unit} color={color} />
+          {masked ? (
+            <p className="py-10 text-center text-sm text-slate-500">
+              Histórico mascarado para o perfil auditor (minimização de dados).
+            </p>
+          ) : (
+            <TelemetryChart points={points} unit={unit} color={color} warn={warn} crit={crit} />
+          )}
         </div>
       )}
     </Card>

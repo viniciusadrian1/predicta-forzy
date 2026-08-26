@@ -7,6 +7,7 @@ TAG -> (opcional) criacao automatica -> evento de auditoria.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from app.modules.assets.models import Asset
 from app.modules.assets.repository import AssetRepository
@@ -56,7 +57,13 @@ class RpaService:
         self._repo = repository
 
     async def register_from_image(
-        self, raw: bytes, tag: str | None, auto_create: bool, actor: str
+        self,
+        raw: bytes,
+        tag: str | None,
+        auto_create: bool,
+        actor: str,
+        image_source: str | None = None,
+        visual_condition: str | None = None,
     ) -> RpaRegisterResult:
         # 1. OCR da placa.
         extraction = extract_nameplate(raw)
@@ -94,6 +101,9 @@ class RpaService:
                 duplicate = True
                 message = f"Já existe um ativo com a TAG '{tag}' (cadastro ignorado)."
             elif auto_create:
+                # Metadados de rastreabilidade (governanca): o cadastro nasce como
+                # 'ia_gerado' e PENDENTE de validacao humana (validated_by nulo) -
+                # sinaliza revisao quando o score do OCR e baixo.
                 await self._repo.add_asset(
                     Asset(
                         tag=tag,
@@ -107,6 +117,12 @@ class RpaService:
                         ip_rating=draft.ip_rating,
                         insulation_class=draft.insulation_class,
                         status="unknown",
+                        data_origin="ia_gerado",
+                        registration_photo_at=datetime.now(UTC),
+                        ocr_engine_version=extraction.engine,
+                        ocr_confidence=round(extraction.coverage, 2),
+                        image_source=image_source,
+                        visual_condition=visual_condition,
                     )
                 )
                 created = True

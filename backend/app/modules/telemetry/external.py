@@ -23,7 +23,8 @@ import httpx
 
 from app.core.config import Settings
 from app.infra.db.base import timeseries_session_factory
-from app.modules.telemetry.processing import ProcessedSample
+from app.infra.opcua_client.client import TelemetrySample
+from app.modules.telemetry.processing import QUALITY_GOOD, process_sample
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.telemetry.stream import broadcaster
 
@@ -68,7 +69,7 @@ def extract_readings(payload: object) -> dict[str, float]:
         if mapped is None:
             continue
         try:
-            readings[mapped[0]] = float(value)  # type: ignore[arg-type]
+            readings[mapped[0]] = float(value)
         except (TypeError, ValueError):
             continue
     return readings
@@ -137,28 +138,33 @@ class ExternalSensorsService:
 
     async def _ingest(self, tag: str, readings: dict[str, float]) -> int:
         now = datetime.now(UTC)
-        samples = [
-            ProcessedSample(
-                time=now,
+        # Passa pelo MESMO pipeline do OPC-UA: grava o dado bruto (lineage) e
+        # valida a faixa via process_sample (marca QUALITY_OUT_OF_RANGE quando
+        # a leitura fisica esta fora do esperado) - nada entra como GOOD as cegas.
+        raw = [
+            TelemetrySample(
                 asset_tag=tag,
                 variable=variable,
-                value=round(value, 4),
-                unit=next(u for v, u in VARIABLE_MAP.values() if v == variable),
-                quality=0,
+                value=value,
+                timestamp=now,
+                quality=QUALITY_GOOD,
+                source="forzy-http",
             )
             for variable, value in readings.items()
         ]
+        processed = [process_sample(sample) for sample in raw]
         async with timeseries_session_factory() as session:
             repository = TelemetryRepository(session)
-            for sample in samples:
+            for raw_sample, sample in zip(raw, processed, strict=True):
+                await repository.add_raw(raw_sample)
                 await repository.add_processed(sample)
             await session.commit()
-        for sample in samples:
+        for sample in processed:
             await broadcaster.publish(sample.as_event())
         logger.info(
             "Sensores externos: %d leitura(s) do ativo %s",
-            len(samples),
+            len(processed),
             tag,
             extra={"event": "external_ingest", "asset_tag": tag},
         )
-        return len(samples)
+        return len(processed)

@@ -13,12 +13,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import text
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
-from app.infra.db.base import timeseries_engine
+from app.infra.db.base import (
+    catalog_session_factory,
+    timeseries_engine,
+    timeseries_session_factory,
+)
 from app.infra.db.timescale import init_timeseries_schema
 from app.modules.alerts.evaluator import alerts_evaluator
 from app.modules.alerts.router import router as alerts_router
@@ -41,6 +46,31 @@ configure_logging(settings.log_level)
 logger = logging.getLogger("forzy.main")
 
 APP_VERSION = "0.4.0"
+
+_DEFAULT_JWT_SECRET = "dev-only-secret-change-me-in-production-min32b"
+
+
+def _assert_production_secure(cfg: Settings) -> None:
+    """Aborta o boot fora de desenvolvimento se a configuração estiver insegura.
+
+    Todo o RBAC confia no claim ``role`` do JWT: com o segredo default (que está
+    versionado) qualquer um forja um token admin. Em ``development``/``test``/
+    ``local`` a checagem não interfere; em produção ela recusa o boot.
+    """
+    if cfg.environment.lower() in ("development", "dev", "test", "local"):
+        return
+    problems: list[str] = []
+    if cfg.jwt_secret_key == _DEFAULT_JWT_SECRET or len(cfg.jwt_secret_key) < 32:
+        problems.append("JWT_SECRET_KEY inseguro (default ou com menos de 32 caracteres)")
+    if not cfg.rbac_enabled:
+        problems.append("RBAC_ENABLED desligado")
+    if problems:
+        message = (
+            f"Configuração insegura para o ambiente '{cfg.environment}': "
+            f"{'; '.join(problems)}. Defina um JWT_SECRET_KEY forte e habilite o RBAC."
+        )
+        logger.critical(message)
+        raise RuntimeError(message)
 
 
 @asynccontextmanager
@@ -78,6 +108,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """Constroi e configura a instancia FastAPI."""
+    _assert_production_secure(settings)
     app = FastAPI(
         title=settings.project_name,
         version=APP_VERSION,
@@ -124,11 +155,34 @@ def create_app() -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     async def health() -> HealthResponse:
+        # Liveness: o processo esta de pe (nao checa dependencias).
         return HealthResponse(
             status="ok",
             project=settings.project_name,
             environment=settings.environment,
             version=APP_VERSION,
+        )
+
+    @app.get("/health/ready", tags=["system"])
+    async def health_ready() -> JSONResponse:
+        # Readiness: so responde pronto se os bancos respondem (SELECT 1).
+        checks: dict[str, str] = {}
+        ready = True
+        for name, factory in (
+            ("catalog", catalog_session_factory),
+            ("timeseries", timeseries_session_factory),
+        ):
+            try:
+                async with factory() as session:
+                    await session.execute(text("SELECT 1"))
+                checks[name] = "ok"
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Readiness: %s indisponivel (%s)", name, exc)
+                checks[name] = "error"
+                ready = False
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={"ready": ready, "checks": checks},
         )
 
     @app.get("/", include_in_schema=False)

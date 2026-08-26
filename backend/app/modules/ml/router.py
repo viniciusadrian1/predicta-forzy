@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_actor
 from app.core.rbac import require_role
-from app.infra.db.base import get_timeseries_session
+from app.infra.db.base import get_catalog_session, get_timeseries_session
+from app.modules.ml.models import MlFeedback
+from app.modules.ml.repository import MlFeedbackRepository
 from app.modules.ml.schemas import (
     AnomalyPrediction,
     BaselinePrediction,
+    FeedbackOut,
     FeedbackRequest,
     FeedbackResponse,
     MlStatus,
@@ -72,6 +75,27 @@ async def rul_estimate(
 async def ml_feedback(
     payload: FeedbackRequest,
     actor: str = Depends(get_current_actor),
+    catalog: AsyncSession = Depends(get_catalog_session),
 ) -> FeedbackResponse:
-    """Registra um reporte de predicao incorreta (loop de feedback)."""
+    """Registra um reporte de predicao incorreta (loop de feedback persistido)."""
+    await MlFeedbackRepository(catalog).create(
+        MlFeedback(
+            asset_tag=payload.asset_tag,
+            model=payload.model,
+            prediction=payload.prediction,
+            is_correct=payload.is_correct,
+            comment=payload.comment,
+            actor=actor,
+        )
+    )
     return ml_service.record_feedback(payload, actor)
+
+
+@router.get("/ml/feedback", response_model=list[FeedbackOut])
+async def list_feedback(
+    limit: int = Query(default=100, ge=1, le=500),
+    asset_tag: str | None = Query(default=None),
+    catalog: AsyncSession = Depends(get_catalog_session),
+) -> list[MlFeedback]:
+    """Lista os reportes de feedback recentes (governanca do modelo)."""
+    return await MlFeedbackRepository(catalog).list_recent(limit, asset_tag)

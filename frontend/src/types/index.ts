@@ -23,8 +23,51 @@ export interface Asset {
   position_y: number | null;
   datasheet_url: string | null;
   status: string;
+  // Rastreabilidade do cadastro (governança).
+  data_origin: string;
+  registration_photo_at: string | null;
+  ocr_engine_version: string | null;
+  ocr_confidence: number | null;
+  validated_by: string | null;
+  validated_at: string | null;
+  image_source: string | null;
+  visual_condition: string | null;
+  // Limiares por ativo (contrato de métricas).
+  vib_warning: number | null;
+  vib_critical: number | null;
+  temp_warning: number | null;
+  temp_critical: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MlFeedback {
+  id: string;
+  asset_tag: string;
+  model: string;
+  prediction: string;
+  is_correct: boolean;
+  comment: string | null;
+  actor: string;
+  created_at: string;
+}
+
+export interface TagAuditEvent {
+  id: string;
+  action: string;
+  user_id: string;
+  user_role: string;
+  tag_id: string;
+  equipment_id: string | null;
+  map_version: string;
+  coords_before: Record<string, number | null> | null;
+  coords_after: Record<string, number | null> | null;
+  data_origin: string;
+  confidence_score: number | null;
+  validation_status: string;
+  validated_by: string | null;
+  integrity_hash: string;
+  created_at: string;
 }
 
 export interface Plant {
@@ -185,36 +228,6 @@ export interface Alert {
   ack_comment: string | null;
 }
 
-// --- RAG / Chat de troubleshooting ---
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-export interface ChatSource {
-  document_id: string;
-  document_title: string;
-  snippet: string;
-  score: number;
-}
-
-export interface ChatResponse {
-  answer: string;
-  mode: "anthropic" | "offline";
-  sources: ChatSource[];
-  asset_tag: string | null;
-  used_asset_context: boolean;
-}
-
-export interface RagStatus {
-  ready: boolean;
-  indexed_chunks: number;
-  documents: number;
-  vector_backend: string;
-  llm_mode: "anthropic" | "offline";
-  embedding_dim: number;
-}
-
 // --- Governança / Administração ---
 export interface AuditEntry {
   id: string;
@@ -312,6 +325,10 @@ export interface VoltHandoff {
   reason: string;
 }
 
+export interface VoltSource {
+  document_title: string;
+  snippet: string;
+}
 export interface VoltReply {
   message: string;
   state: VoltState;
@@ -319,5 +336,6 @@ export interface VoltReply {
   diagnosis: VoltDiagnosis | null;
   work_order: WorkOrder | null;
   handoff: VoltHandoff | null;
+  sources: VoltSource[];
   done: boolean;
 }

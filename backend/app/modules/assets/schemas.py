@@ -67,6 +67,21 @@ class AssetBase(BaseModel):
     datasheet_url: str | None = None
     status: str = "unknown"
 
+    # Rastreabilidade do cadastro (governanca).
+    data_origin: str = "humano"
+    registration_photo_at: datetime | None = None
+    ocr_engine_version: str | None = None
+    ocr_confidence: float | None = None
+    validated_by: str | None = None
+    validated_at: datetime | None = None
+    image_source: str | None = None
+    visual_condition: str | None = None
+    # Limiares por ativo (contrato de metricas). Nulos = limiares globais ISO.
+    vib_warning: float | None = None
+    vib_critical: float | None = None
+    temp_warning: float | None = None
+    temp_critical: float | None = None
+
 
 class AssetIn(AssetBase):
     """Payload de criacao de ativo."""
@@ -97,6 +112,14 @@ class AssetUpdate(BaseModel):
     position_y: float | None = None
     datasheet_url: str | None = None
     status: str | None = None
+    # Validacao humana do cadastro + limiares por ativo (governanca).
+    validated_by: str | None = None
+    image_source: str | None = None
+    visual_condition: str | None = None
+    vib_warning: float | None = None
+    vib_critical: float | None = None
+    temp_warning: float | None = None
+    temp_critical: float | None = None
 
 
 class AssetOut(AssetBase):

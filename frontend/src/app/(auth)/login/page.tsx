@@ -104,7 +104,8 @@ export default function LoginPage() {
               {formState.isSubmitting ? "Entrando..." : "Entrar"}
             </Button>
             <p className="text-center text-xs text-slate-600">
-              Ambiente de demonstração — admin / admin123
+              Ambiente de demonstração — admin · gestor · operador · auditor · viewer (senha:
+              usuário + 123)
             </p>
           </form>
         </CardContent>

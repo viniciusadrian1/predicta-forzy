@@ -61,34 +61,39 @@ def _make_windows(values: np.ndarray, size: int) -> np.ndarray:
 
 @dataclass
 class ModelBundle:
-    """Conjunto de modelos treinados, com metadados de versao."""
+    """Conjunto de modelos treinados de UM ativo, com metadados de versao."""
 
     version: str
     trained_at: datetime
     n_samples: int
     baseline: Any
+    # Features realmente usadas (o ativo pode nao ter os 6 sensores - ex.: os
+    # motores fisicos Forzy so tem vibracao + temperatura).
+    features: tuple[str, ...] = ()
     autoencoder: Any = None
     anomaly_threshold: float = 0.0
 
 
 class MlService:
-    """Treina (sob demanda) e serve os modelos de ML."""
+    """Treina (sob demanda, POR ATIVO) e serve os modelos de ML."""
 
     def __init__(self) -> None:
-        self._bundle: ModelBundle | None = None
+        # Um modelo por ativo: evita aplicar o modelo do MTR-001 a outros motores.
+        self._bundles: dict[str, ModelBundle] = {}
 
     @property
     def ready(self) -> bool:
-        return self._bundle is not None
+        return bool(self._bundles)
 
     def status(self) -> MlStatus:
-        if self._bundle is None:
+        if not self._bundles:
             return MlStatus(ready=False)
+        latest = max(self._bundles.values(), key=lambda bundle: bundle.trained_at)
         return MlStatus(
             ready=True,
-            model_version=self._bundle.version,
-            trained_at=self._bundle.trained_at,
-            n_samples=self._bundle.n_samples,
+            model_version=latest.version,
+            trained_at=latest.trained_at,
+            n_samples=latest.n_samples,
         )
 
     async def _fetch_wide(
@@ -118,57 +123,100 @@ class MlService:
         present = [column for column in SENSOR_ORDER if column in wide.columns]
         return wide.dropna(subset=present)
 
+    async def _fetch_history(
+        self, session: AsyncSession, asset_tag: str, max_rows: int = 60000
+    ) -> pd.DataFrame:
+        """Historico do ativo em formato wide (por contagem, sem filtro de tempo).
+
+        Usado no TREINO: pega as ultimas ``max_rows`` leituras independentemente
+        da data, o que permite treinar tambem com o dado real importado (que e de
+        meses atras) - nao so com a janela recente do simulador.
+        """
+        stmt = (
+            select(
+                telemetry_processed.c.time,
+                telemetry_processed.c.variable,
+                telemetry_processed.c.value,
+            )
+            .where(telemetry_processed.c.asset_tag == asset_tag)
+            .order_by(telemetry_processed.c.time.desc())
+            .limit(max_rows)
+        )
+        result = await session.execute(stmt)
+        rows = [dict(row) for row in result.mappings().all()]
+        if not rows:
+            return pd.DataFrame()
+        frame = pd.DataFrame(rows)
+        frame["time"] = pd.to_datetime(frame["time"]).dt.floor("s")
+        wide = frame.pivot_table(index="time", columns="variable", values="value", aggfunc="mean")
+        wide = wide.sort_index()
+        present = [column for column in SENSOR_ORDER if column in wide.columns]
+        return wide.dropna(subset=present)
+
     async def train(self, session: AsyncSession, asset_tag: str = "MTR-001") -> bool:
-        """Treina os modelos a partir da telemetria recente; devolve sucesso."""
-        wide = await self._fetch_wide(session, asset_tag, minutes=240)
-        if len(wide) < MIN_TRAINING_SAMPLES or not all(
-            column in wide.columns for column in SENSOR_ORDER
-        ):
-            logger.warning("ML: dados insuficientes para treino (%d amostras)", len(wide))
+        """Treina os modelos DESTE ativo com as variaveis que ele realmente tem."""
+        wide = await self._fetch_history(session, asset_tag)
+        available = [column for column in SENSOR_ORDER if column in wide.columns]
+        if len(wide) < MIN_TRAINING_SAMPLES or not available:
+            logger.warning(
+                "ML: dados insuficientes para treino de %s (%d amostras, %d features)",
+                asset_tag,
+                len(wide),
+                len(available),
+            )
             return False
 
-        features = wide[list(SENSOR_ORDER)].to_numpy(dtype=float)
+        features = wide[available].to_numpy(dtype=float)
         baseline = IsolationForest(n_estimators=120, contamination=0.03, random_state=42)
         baseline.fit(features)
 
+        # Autoencoder de vibracao: so quando ha o sinal de velocidade de vibracao.
         autoencoder: Any = None
         threshold = 0.0
-        windows = _make_windows(wide[VIBRATION_VARIABLE].to_numpy(dtype=float), WINDOW_SIZE)
-        if len(windows) >= MIN_TRAINING_SAMPLES:
-            autoencoder = MLPRegressor(hidden_layer_sizes=(8, 4, 8), max_iter=500, random_state=42)
-            autoencoder.fit(windows, windows)
-            errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
-            threshold = float(np.percentile(errors, 99))
+        if VIBRATION_VARIABLE in wide.columns:
+            windows = _make_windows(wide[VIBRATION_VARIABLE].to_numpy(dtype=float), WINDOW_SIZE)
+            if len(windows) >= MIN_TRAINING_SAMPLES:
+                autoencoder = MLPRegressor(
+                    hidden_layer_sizes=(8, 4, 8), max_iter=500, random_state=42
+                )
+                autoencoder.fit(windows, windows)
+                errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
+                threshold = float(np.percentile(errors, 99))
 
-        self._bundle = ModelBundle(
+        bundle = ModelBundle(
             version=datetime.now(UTC).strftime("v%Y%m%d%H%M%S"),
             trained_at=datetime.now(UTC),
             n_samples=int(len(wide)),
             baseline=baseline,
+            features=tuple(available),
             autoencoder=autoencoder,
             anomaly_threshold=threshold,
         )
+        self._bundles[asset_tag] = bundle
         logger.info(
-            "ML: modelos treinados (%d amostras, versao %s)",
-            self._bundle.n_samples,
-            self._bundle.version,
+            "ML: modelos treinados asset=%s (%d amostras, features=%s, versao %s)",
+            asset_tag,
+            bundle.n_samples,
+            ",".join(available),
+            bundle.version,
         )
         return True
 
-    async def _ensure(self, session: AsyncSession) -> None:
-        if self._bundle is None:
-            await self.train(session)
+    async def _ensure(self, session: AsyncSession, asset_tag: str) -> None:
+        if asset_tag not in self._bundles:
+            await self.train(session, asset_tag)
 
     async def predict_baseline(self, session: AsyncSession, asset_tag: str) -> BaselinePrediction:
-        await self._ensure(session)
-        if self._bundle is None:
-            return BaselinePrediction(ready=False)
+        await self._ensure(session, asset_tag)
+        bundle = self._bundles.get(asset_tag)
+        if bundle is None:
+            return BaselinePrediction(ready=self.ready, available=False, asset_tag=asset_tag)
         wide = await self._fetch_wide(session, asset_tag, minutes=10)
-        if wide.empty or not all(c in wide.columns for c in SENSOR_ORDER):
+        if wide.empty or not all(c in wide.columns for c in bundle.features):
             return BaselinePrediction(ready=True, available=False, asset_tag=asset_tag)
-        latest = wide[list(SENSOR_ORDER)].to_numpy(dtype=float)[-1:]
-        score = float(self._bundle.baseline.score_samples(latest)[0])
-        is_normal = int(self._bundle.baseline.predict(latest)[0]) == 1
+        latest = wide[list(bundle.features)].to_numpy(dtype=float)[-1:]
+        score = float(bundle.baseline.score_samples(latest)[0])
+        is_normal = int(bundle.baseline.predict(latest)[0]) == 1
         logger.info(
             "ml_prediction model=baseline asset=%s decision=%s score=%.4f",
             asset_tag,
@@ -182,13 +230,14 @@ class MlService:
             asset_tag=asset_tag,
             score=round(score, 4),
             decision="normal" if is_normal else "anomalo",
-            model_version=self._bundle.version,
+            model_version=bundle.version,
         )
 
     async def predict_anomaly(self, session: AsyncSession, asset_tag: str) -> AnomalyPrediction:
-        await self._ensure(session)
-        if self._bundle is None or self._bundle.autoencoder is None:
-            return AnomalyPrediction(ready=self._bundle is not None, available=False)
+        await self._ensure(session, asset_tag)
+        bundle = self._bundles.get(asset_tag)
+        if bundle is None or bundle.autoencoder is None:
+            return AnomalyPrediction(ready=self.ready, available=False, asset_tag=asset_tag)
         wide = await self._fetch_wide(session, asset_tag, minutes=30)
         if wide.empty or VIBRATION_VARIABLE not in wide.columns:
             return AnomalyPrediction(ready=True, available=False, asset_tag=asset_tag)
@@ -196,9 +245,9 @@ class MlService:
         if len(vibration) < WINDOW_SIZE:
             return AnomalyPrediction(ready=True, available=False, asset_tag=asset_tag)
         window = vibration[-WINDOW_SIZE:].reshape(1, -1)
-        reconstruction = self._bundle.autoencoder.predict(window)
+        reconstruction = bundle.autoencoder.predict(window)
         error = float(np.mean((window - reconstruction) ** 2))
-        is_anomaly = error > self._bundle.anomaly_threshold
+        is_anomaly = error > bundle.anomaly_threshold
         logger.info(
             "ml_prediction model=anomaly asset=%s anomaly=%s error=%.5f",
             asset_tag,
@@ -211,14 +260,15 @@ class MlService:
             available=True,
             asset_tag=asset_tag,
             reconstruction_error=round(error, 5),
-            threshold=round(self._bundle.anomaly_threshold, 5),
+            threshold=round(bundle.anomaly_threshold, 5),
             is_anomaly=is_anomaly,
-            model_version=self._bundle.version,
+            model_version=bundle.version,
         )
 
     async def estimate_rul(self, session: AsyncSession, asset_tag: str) -> RulEstimate:
-        await self._ensure(session)
-        version = self._bundle.version if self._bundle else None
+        await self._ensure(session, asset_tag)
+        bundle = self._bundles.get(asset_tag)
+        version = bundle.version if bundle else None
         wide = await self._fetch_wide(session, asset_tag, minutes=240)
         if wide.empty or VIBRATION_VARIABLE not in wide.columns or len(wide) < 30:
             return RulEstimate(

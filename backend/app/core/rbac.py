@@ -25,15 +25,22 @@ from app.core.security import decode_token
 
 logger = logging.getLogger("forzy.rbac")
 
-# Papeis ordenados por nivel de privilegio crescente.
+# Papeis ordenados por nivel de privilegio crescente (poder de ESCRITA).
+# 'auditor' e transversal: so-leitura (nivel de escrita = viewer), mas com
+# acesso amplo de LEITURA (auditoria, linhagem) concedido por require_any_role.
 ROLE_HIERARCHY: dict[str, int] = {
     "viewer": 0,
+    "auditor": 0,
     "operator": 1,
     "engineer": 2,
     "admin": 3,
 }
 DEFAULT_ROLE = "viewer"
 ANONYMOUS = "anonymous"
+
+# Papeis autorizados a ler a trilha de auditoria e a linhagem de dados.
+AUDIT_ROLES = frozenset({"auditor", "admin"})
+LINEAGE_ROLES = frozenset({"auditor", "engineer", "admin"})
 
 
 @dataclass(frozen=True)
@@ -110,6 +117,33 @@ def require_role(minimum: str) -> Callable[..., Awaitable[Principal]]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Acesso negado: requer o papel '{minimum}' ou superior.",
+            )
+        return principal
+
+    return _dependency
+
+
+def require_any_role(allowed: frozenset[str]) -> Callable[..., Awaitable[Principal]]:
+    """Dependency que exige que o papel esteja em ``allowed`` (nao-linear).
+
+    Usada para acessos transversais como a auditoria (auditor OU admin), que a
+    hierarquia linear de ``require_role`` nao consegue expressar.
+    """
+
+    async def _dependency(principal: Principal = Depends(get_principal)) -> Principal:
+        if not rbac_enforced():
+            return principal
+        if principal.role not in allowed:
+            logger.warning(
+                "rbac_denied actor=%s role=%s allowed=%s",
+                principal.username,
+                principal.role,
+                sorted(allowed),
+                extra={"event": "rbac_denied", "actor": principal.username},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Acesso negado: requer um dos papéis {sorted(allowed)}.",
             )
         return principal
 

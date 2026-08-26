@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from app.modules.assets.models import Area, Asset, Plant
 from app.modules.assets.repository import AssetRepository
 from app.modules.assets.schemas import AreaIn, AssetIn, AssetUpdate, PlantIn
+from app.modules.governance.repository import TagAuditRepository
 
 
 class AssetAlreadyExistsError(Exception):
@@ -42,10 +44,41 @@ class AssetService:
             raise AssetAlreadyExistsError(payload.tag)
         return await self._repo.add_asset(Asset(**payload.model_dump()))
 
-    async def update_asset(self, tag: str, payload: AssetUpdate) -> Asset:
+    async def update_asset(
+        self, tag: str, payload: AssetUpdate, actor: str = "system", role: str = "system"
+    ) -> Asset:
         asset = await self.get_asset(tag)
+        coords_before = {"x": asset.position_x, "y": asset.position_y}
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(asset, field, value)
+        updated = await self._repo.update_asset(asset)
+
+        # Trilha de rastreabilidade da TAG na planta (governanca): registra a
+        # edicao/movimentacao com coordenadas antes/depois e hash de integridade.
+        coords_after = {"x": updated.position_x, "y": updated.position_y}
+        moved = coords_before != coords_after
+        await TagAuditRepository(self._repo._session).record(
+            action="movimentacao" if moved else "edicao",
+            user_id=actor,
+            user_role=role,
+            tag_id=updated.tag,
+            equipment_id=updated.serial_number or updated.model,
+            coords_before=coords_before,
+            coords_after=coords_after,
+            data_origin="humano",
+        )
+        return updated
+
+    async def validate_asset(self, tag: str, actor: str) -> Asset:
+        """Validacao manual de cadastro (perfil Gestor de Planta / Admin).
+
+        Confirma um cadastro gerado por IA: registra quem validou e quando -
+        accountability exigida pela governanca (nenhum cadastro 100% automatico
+        sem supervisao humana).
+        """
+        asset = await self.get_asset(tag)
+        asset.validated_by = actor
+        asset.validated_at = datetime.now(UTC)
         return await self._repo.update_asset(asset)
 
     async def delete_asset(self, tag: str) -> None:

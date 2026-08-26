@@ -2,15 +2,24 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Download, MapPinOff, ServerCrash } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
-import { PlantMap } from "@/components/PlantMap";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { getAssets, getPlants, smartPdfUrl } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
+
+// Planta isometrica 3D (three.js): so no cliente (WebGL nao roda no server).
+const IsoPlant = dynamic(() => import("@/components/iso-plant/IsoPlant"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[70vh] min-h-[520px] w-full items-center justify-center rounded-xl border border-slate-800 bg-slate-950 text-sm text-slate-400">
+      Carregando planta 3D…
+    </div>
+  ),
+});
 
 interface PlantPageProps {
   params: { plantId: string };
@@ -86,27 +95,8 @@ export default function PlantPage({ params }: PlantPageProps) {
             }
           />
         ) : (
-          <Card>
-            <CardContent className="p-4">
-              <PlantMap assets={assets} />
-            </CardContent>
-          </Card>
+          <IsoPlant assets={assets} />
         )}
-
-        <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400">
-          <span>
-            <span className="text-emerald-400">&#9679;</span> Operacional
-          </span>
-          <span>
-            <span className="text-amber-400">&#9679;</span> Atenção
-          </span>
-          <span>
-            <span className="text-red-400">&#9679;</span> Crítico
-          </span>
-          <span>
-            <span className="text-slate-500">&#9679;</span> Desconhecido
-          </span>
-        </div>
     </AppShell>
   );
 }

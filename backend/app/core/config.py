@@ -83,6 +83,12 @@ class Settings(BaseSettings):
 
     # --- Alertas: ativos avaliados pelo verificador periodico ---
     monitored_asset_tags: str = "MTR-001,MTR-F01,MTR-F02"
+    # Webhook para notificar alertas >= WARNING (Teams/Slack/CMMS). Vazio = so grava.
+    alert_webhook_url: str = ""
+    # Circuit breaker: suspende o alerta automatico quando o dado nao e confiavel.
+    # O documento de governanca usa 10s (dados IO-Link de alta frequencia); aqui o
+    # padrao e mais folgado por causa da cadencia de poll (30s) + dedup de idle.
+    circuit_breaker_gap_seconds: float = 120.0
 
     # --- Volt (chatbot de manutencao) ---
     # Limiar de confianca: abaixo dele, o diagnostico e escalado a um humano.

@@ -44,12 +44,32 @@ function DiagnosisCard({ reply }: { reply: VoltReply }) {
         <dt className="text-slate-500">Prioridade</dt>
         <dd className={PRIORITY_COLOR[wo.priority] ?? "text-slate-200"}>{wo.priority}</dd>
       </dl>
-      {dx.readings && (
+      {dx.evidence && (
         <p className="mt-2 border-t border-slate-800 pt-2 text-[11px] text-slate-500">
           Evidência: {dx.evidence}
         </p>
       )}
     </div>
+  );
+}
+
+function SourcesCard({ reply }: { reply: VoltReply }) {
+  const sources = reply.sources ?? [];
+  if (sources.length === 0) return null;
+  return (
+    <details className="mt-2 border-t border-slate-700 pt-2">
+      <summary className="cursor-pointer text-xs text-slate-400">
+        Fontes ({sources.length}) — base técnica
+      </summary>
+      <ul className="mt-2 space-y-2">
+        {sources.map((source, index) => (
+          <li key={index} className="text-xs text-slate-400">
+            <span className="font-medium text-slate-300">{source.document_title}</span>
+            <p className="mt-0.5 text-slate-500">{source.snippet}</p>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -170,12 +190,13 @@ export function VoltChat() {
               <p className="whitespace-pre-wrap leading-relaxed">{bubble.text}</p>
               {bubble.reply && <DiagnosisCard reply={bubble.reply} />}
               {bubble.reply && <HandoffCard reply={bubble.reply} />}
+              {bubble.reply && <SourcesCard reply={bubble.reply} />}
             </div>
           </div>
         ))}
         {mutation.isPending && (
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Volt está consultando os sensores...
+            <Loader2 className="h-4 w-4 animate-spin" /> Volt está preparando a resposta...
           </div>
         )}
       </div>
@@ -207,7 +228,7 @@ export function VoltChat() {
           aria-label="Mensagem para o Volt"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Digite o código do ativo ou o sintoma..."
+          placeholder="Código do ativo, sintoma ou uma pergunta técnica..."
           disabled={mutation.isPending}
           className="h-10 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 disabled:opacity-50"
         />

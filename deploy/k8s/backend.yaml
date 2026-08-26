@@ -33,7 +33,11 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2
+  # 1 replica: a ingestao OPC-UA, o poller Forzy e o avaliador de alertas rodam
+  # in-process como singletons. Com 2+ replicas, cada uma duplicaria a escrita
+  # de telemetria e os alertas. Para escalar a API, separar os workers de
+  # background num Deployment proprio (replicas:1) ou usar leader-election.
+  replicas: 1
   selector:
     matchLabels:
       app: backend
@@ -54,8 +58,9 @@ spec:
             - secretRef:
                 name: predicta-secrets
           readinessProbe:
+            # Readiness checa os bancos (SELECT 1): so recebe trafego se prontos.
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 10

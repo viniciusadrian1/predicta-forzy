@@ -11,6 +11,7 @@ import contextlib
 import logging
 from typing import Any
 
+import httpx
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,7 @@ from app.infra.db.base import catalog_session_factory, timeseries_session_factor
 from app.modules.alerts.models import Alert
 from app.modules.alerts.repository import AlertRepository
 from app.modules.assets.models import Asset
+from app.modules.assets.repository import AssetRepository
 from app.modules.ml.service import ml_service
 from app.modules.telemetry.repository import TelemetryRepository
 
@@ -27,7 +29,8 @@ logger = logging.getLogger("forzy.alerts.evaluator")
 EVALUATION_INTERVAL_S = 30.0
 MONITORED_ASSET_TAG = "MTR-001"
 
-# Limites operacionais (DIN ISO 10816/20816 para vibracao).
+# Limites operacionais globais (DIN ISO 10816/20816) - usados quando o ativo
+# nao tem limiares proprios (contrato de metricas por percentil / por motor).
 VIB_WARNING = 4.5
 VIB_CRITICAL = 7.1
 TEMP_WARNING = 95.0
@@ -36,6 +39,9 @@ RUL_WARNING_DAYS = 45.0
 RUL_CRITICAL_DAYS = 15.0
 # Janela de deduplicacao: nao recria o mesmo tipo de alerta nesse intervalo.
 DEDUP_MINUTES = 15
+# ponytail: aceleracao minima esperada quando ha vibracao relevante - abaixo
+# disso com velocidade alta indica divergencia (falha de sensor). Calibrar.
+ACCEL_DIVERGENCE_MIN = 0.02
 
 # (severidade, tipo, mensagem, score)
 Candidate = tuple[str, str, str, float | None]
@@ -82,42 +88,67 @@ class AlertsEvaluator:
         """Avalia um ativo (regras + ML) e cria os alertas necessarios."""
         candidates: list[Candidate] = []
 
-        async with timeseries_session_factory() as ts_session:
-            latest = await TelemetryRepository(ts_session).latest(asset_tag)
-            readings = {row["variable"]: row["value"] for row in latest}
-            candidates += self._threshold_rules(readings)
+        # Limiares por ativo (contrato de metricas); nulos -> globais ISO.
+        async with catalog_session_factory() as cat_session:
+            asset = await AssetRepository(cat_session).get_asset_by_tag(asset_tag)
+        thresholds = self._thresholds(asset)
 
-            baseline = await ml_service.predict_baseline(ts_session, asset_tag)
-            if baseline.available and baseline.decision == "anomalo":
+        async with timeseries_session_factory() as ts_session:
+            repo_ts = TelemetryRepository(ts_session)
+            latest = await repo_ts.latest(asset_tag)
+            readings = {row["variable"]: row["value"] for row in latest}
+            qualities = {row["variable"]: row["quality"] for row in latest}
+            recent = {
+                variable: await repo_ts.recent_values(asset_tag, variable, 2)
+                for variable in ("Vibracao_Velocidade_RMS", "Temperatura")
+            }
+
+            # Circuit Breaker: se o dado nao e confiavel, suspende o disparo
+            # automatico e retem a decisao para revisao humana.
+            breaker = self._circuit_breaker(readings, qualities, recent)
+            if breaker is not None:
                 candidates.append(
                     (
                         "WARNING",
-                        "BASELINE_DEVIATION",
-                        "Desvio do baseline de operação detectado pelo modelo",
-                        baseline.score,
-                    )
-                )
-            anomaly = await ml_service.predict_anomaly(ts_session, asset_tag)
-            if anomaly.available and anomaly.is_anomaly:
-                candidates.append(
-                    (
-                        "WARNING",
-                        "ANOMALY_DETECTED",
-                        "Anomalia de vibração detectada (autoencoder)",
-                        anomaly.reconstruction_error,
-                    )
-                )
-            rul = await ml_service.estimate_rul(ts_session, asset_tag)
-            if rul.available and rul.rul_days is not None and rul.rul_days < RUL_WARNING_DAYS:
-                severity = "CRITICAL" if rul.rul_days < RUL_CRITICAL_DAYS else "WARNING"
-                candidates.append(
-                    (
-                        severity,
-                        "RUL_WARNING",
-                        f"RUL estimado em {rul.rul_days:.0f} dias — planejar manutenção",
+                        "CIRCUIT_BREAKER",
+                        f"Alerta automático suspenso para revisão humana — {breaker}.",
                         None,
                     )
                 )
+            else:
+                candidates += self._threshold_rules(readings, recent, thresholds)
+
+                baseline = await ml_service.predict_baseline(ts_session, asset_tag)
+                if baseline.available and baseline.decision == "anomalo":
+                    candidates.append(
+                        (
+                            "WARNING",
+                            "BASELINE_DEVIATION",
+                            "Desvio do baseline de operação detectado pelo modelo",
+                            baseline.score,
+                        )
+                    )
+                anomaly = await ml_service.predict_anomaly(ts_session, asset_tag)
+                if anomaly.available and anomaly.is_anomaly:
+                    candidates.append(
+                        (
+                            "WARNING",
+                            "ANOMALY_DETECTED",
+                            "Anomalia de vibração detectada (autoencoder)",
+                            anomaly.reconstruction_error,
+                        )
+                    )
+                rul = await ml_service.estimate_rul(ts_session, asset_tag)
+                if rul.available and rul.rul_days is not None and rul.rul_days < RUL_WARNING_DAYS:
+                    severity = "CRITICAL" if rul.rul_days < RUL_CRITICAL_DAYS else "WARNING"
+                    candidates.append(
+                        (
+                            severity,
+                            "RUL_WARNING",
+                            f"RUL estimado em {rul.rul_days:.0f} dias — planejar manutenção",
+                            None,
+                        )
+                    )
 
         created: list[Alert] = []
         async with catalog_session_factory() as cat_session:
@@ -142,53 +173,153 @@ class AlertsEvaluator:
                     message,
                     extra={"event": "alert_created", "asset_tag": asset_tag},
                 )
+                await self._notify(alert)
             await self._sync_asset_status(asset_tag, cat_session, repo)
         return created
 
-    def _threshold_rules(self, readings: dict[str, Any]) -> list[Candidate]:
-        """Regras determinísticas de limite sobre a ultima leitura."""
+    async def _notify(self, alert: Alert) -> None:
+        """Entrega o alerta a um canal externo (webhook), se configurado.
+
+        Fecha o loop da manutencao preditiva: um alerta >= WARNING chega a quem
+        precisa agir sem depender de alguem com a UI aberta. A deduplicacao do
+        avaliador ja evita spam; falhas de rede nunca derrubam a avaliacao.
+        """
+        url = get_settings().alert_webhook_url
+        if not url or alert.severity not in ("WARNING", "CRITICAL"):
+            return
+        payload = {
+            "asset_tag": alert.asset_tag,
+            "severity": alert.severity,
+            "type": alert.alert_type,
+            "message": alert.message,
+            "score": alert.ml_score,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(url, json=payload)
+        except Exception as exc:  # noqa: BLE001 - webhook nao pode quebrar o avaliador
+            logger.warning("Falha ao notificar alerta via webhook: %s", exc)
+
+    @staticmethod
+    def _thresholds(asset: Asset | None) -> dict[str, float]:
+        """Limiares do ativo (contrato por percentil) ou globais ISO se nulos."""
+        return {
+            "vib_warning": (
+                asset.vib_warning if asset and asset.vib_warning is not None else VIB_WARNING
+            ),
+            "vib_critical": (
+                asset.vib_critical if asset and asset.vib_critical is not None else VIB_CRITICAL
+            ),
+            "temp_warning": (
+                asset.temp_warning if asset and asset.temp_warning is not None else TEMP_WARNING
+            ),
+            "temp_critical": (
+                asset.temp_critical if asset and asset.temp_critical is not None else TEMP_CRITICAL
+            ),
+        }
+
+    @staticmethod
+    def _circuit_breaker(
+        readings: dict[str, Any],
+        qualities: dict[str, Any],
+        recent: dict[str, list[dict[str, Any]]],
+    ) -> str | None:
+        """Motivo para suspender o alerta automatico, ou None se o dado e confiavel."""
+        gap_limit = get_settings().circuit_breaker_gap_seconds
+        vib_recent = recent.get("Vibracao_Velocidade_RMS", [])
+        # 1. Intervalo entre as duas ultimas leituras alem do esperado.
+        if len(vib_recent) >= 2:
+            gap = abs((vib_recent[0]["time"] - vib_recent[1]["time"]).total_seconds())
+            if gap > gap_limit:
+                return f"intervalo de {gap:.0f}s entre leituras (possível falha de comunicação)"
+        # 2. Qualidade comprometida (dado fora de faixa ou inconsistente).
+        if any(quality not in (None, 0) for quality in qualities.values()):
+            return "leitura fora de faixa ou inconsistente (qualidade comprometida)"
+        # 3. Velocidade e aceleracao divergindo (normalmente correlacionadas).
+        velocity = readings.get("Vibracao_Velocidade_RMS")
+        accel = readings.get("Vibracao_Aceleracao_RMS")
+        if (
+            velocity is not None
+            and accel is not None
+            and velocity > 1.0
+            and accel < ACCEL_DIVERGENCE_MIN
+        ):
+            return "velocidade elevada sem aceleração correspondente (possível falha do sensor)"
+        return None
+
+    def _threshold_rules(
+        self,
+        readings: dict[str, Any],
+        recent: dict[str, list[dict[str, Any]]],
+        thresholds: dict[str, float],
+    ) -> list[Candidate]:
+        """Regras de limite por faixa (Normal / Atenção / Crítico) por ativo."""
         out: list[Candidate] = []
         vibration = readings.get("Vibracao_Velocidade_RMS")
         if vibration is not None:
-            if vibration > VIB_CRITICAL:
-                out.append(
-                    (
-                        "CRITICAL",
-                        "THRESHOLD_EXCEEDED",
-                        f"Vibração crítica: {vibration:.2f} mm/s",
-                        None,
-                    )
-                )
-            elif vibration > VIB_WARNING:
-                out.append(
-                    (
-                        "WARNING",
-                        "THRESHOLD_EXCEEDED",
-                        f"Vibração elevada: {vibration:.2f} mm/s",
-                        None,
-                    )
-                )
+            out += self._band_rule(
+                "Vibração",
+                vibration,
+                "mm/s",
+                thresholds["vib_warning"],
+                thresholds["vib_critical"],
+                [row["value"] for row in recent.get("Vibracao_Velocidade_RMS", [])],
+            )
         temperature = readings.get("Temperatura")
         if temperature is not None:
-            if temperature > TEMP_CRITICAL:
-                out.append(
+            out += self._band_rule(
+                "Temperatura",
+                temperature,
+                "°C",
+                thresholds["temp_warning"],
+                thresholds["temp_critical"],
+                [row["value"] for row in recent.get("Temperatura", [])],
+            )
+        return out
+
+    @staticmethod
+    def _band_rule(
+        label: str,
+        value: float,
+        unit: str,
+        warn: float,
+        crit: float,
+        recent_values: list[float],
+    ) -> list[Candidate]:
+        """Uma variavel -> faixa Atenção/Crítico, com anomalia por 2 leituras."""
+        if value > crit:
+            # Anomalia so confirmada com >= 2 leituras consecutivas acima do critico.
+            consecutive = sum(1 for reading in recent_values[:2] if reading > crit)
+            if consecutive >= 2:
+                return [
                     (
                         "CRITICAL",
                         "THRESHOLD_EXCEEDED",
-                        f"Temperatura crítica: {temperature:.1f} °C",
+                        f"Crítico: {label} em {value:.1f} {unit} — acima do limite "
+                        f"{crit:.1f} por 2 leituras consecutivas.",
                         None,
                     )
+                ]
+            return [
+                (
+                    "WARNING",
+                    "THRESHOLD_APPROACHING",
+                    f"Atenção: {label} em {value:.1f} {unit} — acima do limite {crit:.1f}, "
+                    "aguardando confirmação (2ª leitura).",
+                    None,
                 )
-            elif temperature > TEMP_WARNING:
-                out.append(
-                    (
-                        "WARNING",
-                        "THRESHOLD_EXCEEDED",
-                        f"Temperatura elevada: {temperature:.1f} °C",
-                        None,
-                    )
+            ]
+        if value > warn:
+            return [
+                (
+                    "WARNING",
+                    "THRESHOLD_APPROACHING",
+                    f"Atenção: {label} em {value:.1f} {unit} — aproximando-se do limite "
+                    f"crítico de {crit:.1f} {unit}.",
+                    None,
                 )
-        return out
+            ]
+        return []
 
     async def _sync_asset_status(
         self, asset_tag: str, session: AsyncSession, repo: AlertRepository

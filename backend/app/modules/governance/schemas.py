@@ -25,6 +25,28 @@ class AuditEntryOut(BaseModel):
     ip_address: str | None
 
 
+class TagAuditEventOut(BaseModel):
+    """Evento da trilha de associacao / movimentacao de TAG na planta."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: str
+    user_id: str
+    user_role: str
+    tag_id: str
+    equipment_id: str | None
+    map_version: str
+    coords_before: dict | None
+    coords_after: dict | None
+    data_origin: str
+    confidence_score: float | None
+    validation_status: str
+    validated_by: str | None
+    integrity_hash: str
+    created_at: datetime
+
+
 class DataAssetEntry(BaseModel):
     """Item do inventario de dados (data lineage)."""
 

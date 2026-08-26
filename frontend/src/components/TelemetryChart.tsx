@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,12 +17,17 @@ interface TelemetryChartProps {
   points: TelemetryPoint[];
   color?: string;
   unit?: string;
+  /** Limiares ISO 10816 / térmicos — desenhados como linhas de referência. */
+  warn?: number;
+  crit?: number;
 }
 
 export function TelemetryChart({
   points,
   color = "#22d3ee",
   unit = "",
+  warn,
+  crit,
 }: TelemetryChartProps) {
   const data = points.map((point) => ({
     label: new Date(point.time).toLocaleTimeString("pt-BR", {
@@ -66,6 +72,24 @@ export function TelemetryChart({
           }}
           labelStyle={{ color: "#94a3b8" }}
         />
+        {warn !== undefined && (
+          <ReferenceLine
+            y={warn}
+            stroke="#f59e0b"
+            strokeDasharray="4 4"
+            strokeOpacity={0.75}
+            label={{ value: "Atenção", position: "insideRight", fill: "#f59e0b", fontSize: 10 }}
+          />
+        )}
+        {crit !== undefined && (
+          <ReferenceLine
+            y={crit}
+            stroke="#ef4444"
+            strokeDasharray="4 4"
+            strokeOpacity={0.85}
+            label={{ value: "Crítico", position: "insideRight", fill: "#ef4444", fontSize: 10 }}
+          />
+        )}
         <Line
           type="monotone"
           dataKey="value"

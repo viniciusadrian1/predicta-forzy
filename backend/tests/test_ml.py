@@ -42,6 +42,47 @@ async def test_ml_train_and_status(client, timeseries_sessionmaker):
     assert response.json()["ready"] is True
 
 
+async def test_per_asset_training_with_partial_sensors(client, timeseries_sessionmaker):
+    # Motor fisico (MTR-F01) so tem vibracao + temperatura, nao os 6 sensores.
+    # O modelo por ativo deve treinar com o que o ativo REALMENTE tem.
+    from app.modules.ml.service import ml_service
+
+    ml_service._bundles.pop("MTR-F01", None)
+    now = datetime.now(UTC)
+    async with timeseries_sessionmaker() as session:
+        for index in range(140):
+            timestamp = now - timedelta(minutes=140 - index)
+            for variable, value in (
+                ("Vibracao_Velocidade_RMS", 2.0 + (index % 9) * 0.03),
+                ("Vibracao_Aceleracao_RMS", 0.30),
+                ("Temperatura", 40.0),
+            ):
+                await session.execute(
+                    insert(telemetry_processed).values(
+                        time=timestamp,
+                        asset_tag="MTR-F01",
+                        variable=variable,
+                        value=value,
+                        unit="x",
+                        quality=0,
+                    )
+                )
+        await session.commit()
+
+    response = await client.post("/api/v1/ml/baseline/predict", json={"asset_tag": "MTR-F01"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["available"] is True  # treinou e preve mesmo sem os 6 sensores
+
+    # O modelo do F01 usa somente as features que o ativo possui.
+    assert ml_service._bundles["MTR-F01"].features == (
+        "Temperatura",
+        "Vibracao_Velocidade_RMS",
+        "Vibracao_Aceleracao_RMS",
+    )
+
+
 async def test_ml_baseline_predict(client, timeseries_sessionmaker):
     await _seed_telemetry(timeseries_sessionmaker)
     response = await client.post("/api/v1/ml/baseline/predict", json={"asset_tag": "MTR-001"})
@@ -68,3 +109,11 @@ async def test_ml_feedback(client):
     )
     assert response.status_code == 200
     assert response.json()["recorded"] is True
+
+    # O feedback agora e persistido (nao so logado) e pode ser listado.
+    listed = await client.get("/api/v1/ml/feedback?asset_tag=MTR-001")
+    assert listed.status_code == 200
+    body = listed.json()
+    assert len(body) == 1
+    assert body[0]["asset_tag"] == "MTR-001"
+    assert body[0]["is_correct"] is False

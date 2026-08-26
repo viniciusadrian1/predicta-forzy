@@ -25,8 +25,10 @@ router = APIRouter(tags=["auth"])
 # tabela de usuarios ainda nao foi populada (ver app/scripts/seed.py).
 _DEMO_USERS: dict[str, tuple[str, str]] = {
     "admin": ("admin123", "admin"),
-    "engenheiro": ("eng123", "engineer"),
+    "gestor": ("gestor123", "engineer"),  # perfil Gestor de Planta
+    "engenheiro": ("eng123", "engineer"),  # alias historico
     "operador": ("operador123", "operator"),
+    "auditor": ("auditor123", "auditor"),
     "viewer": ("viewer123", "viewer"),
 }
 

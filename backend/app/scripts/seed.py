@@ -22,10 +22,13 @@ logger = logging.getLogger("forzy.seed")
 
 # Usuarios de demonstracao (usuario, senha, papel, nome completo).
 # As senhas sao protegidas por hashing argon2 no momento do seed.
+# Perfis de acesso (governanca): Tecnico=operator, Gestor de Planta=engineer,
+# Auditor de Seguranca=auditor, Administrador=admin.
 _SEED_USERS: tuple[tuple[str, str, str, str], ...] = (
     ("admin", "admin123", "admin", "Administrador do Sistema"),
-    ("engenheiro", "eng123", "engineer", "Engenheiro de Manutencao"),
-    ("operador", "operador123", "operator", "Operador de Planta"),
+    ("gestor", "gestor123", "engineer", "Gestor de Planta"),
+    ("operador", "operador123", "operator", "Tecnico de Operacao"),
+    ("auditor", "auditor123", "auditor", "Auditor de Seguranca"),
     ("viewer", "viewer123", "viewer", "Visualizador"),
 )
 
@@ -85,9 +88,31 @@ async def seed() -> None:
             logger.info("Ativo criado: %s", asset.tag)
 
         # Sensores fisicos da Forzy (S1/S2) - alimentados pela API HTTP externa.
-        for tag, sensor_name, pos_x in (
-            ("MTR-F01", "Motor físico Forzy — sensor S1", 0.32),
-            ("MTR-F02", "Motor físico Forzy — sensor S2", 0.68),
+        # Limiares por percentil do contrato de metricas (governanca, Tabela 9),
+        # com o mapeamento padrao Porta 1 -> MTR-F01 (M1) e Porta 2 -> MTR-F02 (M2).
+        for tag, sensor_name, pos_x, thresholds in (
+            (
+                "MTR-F01",
+                "Motor físico Forzy — sensor S1",
+                0.32,
+                {
+                    "vib_warning": 6.38,
+                    "vib_critical": 6.92,
+                    "temp_warning": 34.0,
+                    "temp_critical": 41.0,
+                },
+            ),
+            (
+                "MTR-F02",
+                "Motor físico Forzy — sensor S2",
+                0.68,
+                {
+                    "vib_warning": 6.43,
+                    "vib_critical": 7.33,
+                    "temp_warning": 39.0,
+                    "temp_critical": 46.0,
+                },
+            ),
         ):
             existing = (
                 await session.execute(select(Asset).where(Asset.tag == tag))
@@ -105,6 +130,8 @@ async def seed() -> None:
                         position_x=pos_x,
                         position_y=0.68,
                         status="unknown",
+                        data_origin="importacao",
+                        **thresholds,
                     )
                 )
                 logger.info("Ativo criado: %s", tag)

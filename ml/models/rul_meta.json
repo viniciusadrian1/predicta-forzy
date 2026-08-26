@@ -1,0 +1,11 @@
+{
+  "model": "rul_linear_regression",
+  "version": "v1",
+  "trained_at": "2026-05-17T04:44:52.405905+00:00",
+  "n_samples": 129600,
+  "trend_mm_s_per_day": 0.042512,
+  "current_vibration": 6.9844,
+  "rul_days": 2.7,
+  "failure_threshold_mm_s": 7.1,
+  "artifact": "rul_v1.pkl"
+}

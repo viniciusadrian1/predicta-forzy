@@ -3,12 +3,28 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PredictRequest(BaseModel):
     asset_tag: str = "MTR-001"
+
+
+class FeedbackOut(BaseModel):
+    """Um reporte de feedback persistido (loop de melhoria)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    asset_tag: str
+    model: str
+    prediction: str
+    is_correct: bool
+    comment: str | None
+    actor: str
+    created_at: datetime
 
 
 class BaselinePrediction(BaseModel):

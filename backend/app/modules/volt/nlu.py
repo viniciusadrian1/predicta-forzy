@@ -35,6 +35,37 @@ _HUMAN_HINTS = (
 
 _URGENCY_HIGH = ("urgente", "parou", "parado", "emergencia", "grave", "fogo", "fumaca", "agora")
 
+# Pistas de que a mensagem e uma duvida tecnica (consulta aos manuais/base RAG),
+# e nao um codigo de ativo ou um sintoma do fluxo guiado.
+_QUESTION_HINTS = (
+    "como ",
+    "o que ",
+    "qual ",
+    "quais ",
+    "quando ",
+    "onde ",
+    "por que",
+    "porque",
+    "pra que",
+    "para que",
+    "posso ",
+    "devo ",
+    "poderia",
+    "explica",
+    "explique",
+    "procedimento",
+    "manual",
+    "norma",
+    "iso ",
+    "torque",
+    "especifica",
+    "significa",
+    "diferenca",
+    "recomenda",
+    "limite",
+    "duvida",
+)
+
 
 def _norm(text: str) -> str:
     """Minusculas sem acento, para casar palavras-chave de forma robusta."""
@@ -69,3 +100,11 @@ def detect_urgency(text: str) -> str:
     """Nivel de urgencia percebido a partir do relato ('alta' ou 'normal')."""
     norm = _norm(text)
     return "alta" if any(word in norm for word in _URGENCY_HIGH) else "normal"
+
+
+def is_question(text: str) -> bool:
+    """Heuristica: a mensagem parece uma duvida tecnica (para consulta aos manuais)."""
+    if "?" in text:
+        return True
+    norm = _norm(text)
+    return any(hint in norm for hint in _QUESTION_HINTS)

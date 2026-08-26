@@ -4,9 +4,10 @@ from datetime import UTC, datetime
 
 from sqlalchemy import insert
 
+from app.core.security import create_access_token
 from app.infra.db.timescale import telemetry_processed
 from app.modules.volt.diagnosis import diagnose
-from app.modules.volt.nlu import detect_symptom, extract_asset_code, wants_human
+from app.modules.volt.nlu import detect_symptom, extract_asset_code, is_question, wants_human
 
 # --------------------------- NLU (unidade) ---------------------------
 
@@ -29,6 +30,13 @@ def test_wants_human():
     assert wants_human("quero falar com uma pessoa")
     assert wants_human("me transfere pro suporte")
     assert not wants_human("MTR-2291")
+
+
+def test_is_question():
+    assert is_question("como faço a manutenção do rolamento?")
+    assert is_question("qual o procedimento de manutenção preventiva")
+    assert not is_question("MTR-2291")
+    assert not is_question("esta vibrando")
 
 
 # ------------------------ Diagnostico (unidade) ------------------------
@@ -154,6 +162,92 @@ async def test_ativo_critico_sempre_handoff(client, timeseries_sessionmaker):
     assert b2["work_order"] is None
     assert b2["handoff"] is not None
     assert "crítico" in b2["handoff"]["reason"].lower()
+
+
+async def test_pergunta_tecnica_consulta_base(client):
+    # Assistente unificado: uma duvida tecnica e respondida pela base de manuais,
+    # sem tentar identificar um ativo (o fluxo guiado nao avanca).
+    r = await client.post(
+        "/api/v1/volt/message",
+        json={"message": "qual o procedimento de manutenção preventiva?", "state": {}},
+    )
+    assert r.status_code == 200
+    b = r.json()
+    assert b["state"]["step"] == "aguardando_ativo"
+    assert b["work_order"] is None and b["handoff"] is None
+    assert b["message"].strip()
+    # nao caiu no ramo de "codigo nao identificado"
+    assert "informe o código do ativo" not in b["message"].lower()
+
+
+async def test_pergunta_tecnica_preserva_fluxo(client):
+    # Perguntar no meio do atendimento responde a duvida e mantem o passo do fluxo.
+    await _create_asset(client, "MTR-2100")
+    r1 = await client.post("/api/v1/volt/message", json={"message": "MTR-2100", "state": {}})
+    state = r1.json()["state"]
+    assert state["step"] == "aguardando_sintoma"
+
+    r2 = await client.post(
+        "/api/v1/volt/message",
+        json={"message": "o que causa desgaste de rolamento?", "state": state},
+    )
+    b2 = r2.json()
+    assert b2["state"]["step"] == "aguardando_sintoma"
+    assert b2["state"]["asset_tag"] == "MTR-2100"
+    assert b2["work_order"] is None and b2["handoff"] is None
+    assert b2["message"].strip()
+
+
+async def test_pergunta_com_numero_vai_para_a_base(client):
+    # Regressao: o regex de codigo de ativo capturava numeros de frases
+    # ("operar com 30 A" -> COM-30) e derrubava o roteamento aos manuais.
+    r = await client.post(
+        "/api/v1/volt/message",
+        json={"message": "de quanto em quanto tempo posso operar com 30 A?", "state": {}},
+    )
+    b = r.json()
+    assert b["state"]["step"] == "aguardando_ativo"
+    assert b["work_order"] is None and b["handoff"] is None
+    assert "informe o código do ativo" not in b["message"].lower()
+
+
+async def test_codigo_puro_com_pontuacao_entra_no_fluxo(client):
+    # "MTR-7000?" e essencialmente so o codigo: deve entrar no fluxo guiado.
+    await _create_asset(client, "MTR-7000")
+    r = await client.post("/api/v1/volt/message", json={"message": "MTR-7000?", "state": {}})
+    b = r.json()
+    assert b["state"]["step"] == "aguardando_sintoma"
+    assert b["state"]["asset_tag"] == "MTR-7000"
+
+
+async def test_abertura_de_os_exige_operator_com_rbac(client, monkeypatch, timeseries_sessionmaker):
+    # Com RBAC ativo, abrir uma OS (escrita) exige operator+; viewer so diagnostica.
+    monkeypatch.setattr("app.modules.volt.service.rbac_enforced", lambda: True)
+    op = {"Authorization": f"Bearer {create_access_token('operador', 'operator')}"}
+    await _create_asset(client, "MTR-8000")
+    await _seed_high_vibration(timeseries_sessionmaker, "MTR-8000")
+
+    # viewer (sem token): diagnostica mas nao abre OS -> handoff
+    r1 = await client.post("/api/v1/volt/message", json={"message": "MTR-8000", "state": {}})
+    r2 = await client.post(
+        "/api/v1/volt/message",
+        json={"message": "vibrando muito", "state": r1.json()["state"]},
+    )
+    b2 = r2.json()
+    assert b2["work_order"] is None
+    assert b2["handoff"] is not None
+    assert "operador" in b2["handoff"]["reason"].lower()
+
+    # operador: abre a OS normalmente
+    r3 = await client.post(
+        "/api/v1/volt/message", json={"message": "MTR-8000", "state": {}}, headers=op
+    )
+    r4 = await client.post(
+        "/api/v1/volt/message",
+        json={"message": "vibrando muito", "state": r3.json()["state"]},
+        headers=op,
+    )
+    assert r4.json()["work_order"] is not None
 
 
 async def test_pedido_explicito_de_humano(client):

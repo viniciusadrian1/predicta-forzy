@@ -24,6 +24,8 @@ async def register_from_image(
     file: UploadFile = File(...),
     tag: str | None = Form(default=None),
     auto_create: bool = Form(default=False),
+    image_source: str | None = Form(default="camera_fixa"),
+    visual_condition: str | None = Form(default=None),
     actor: str = Depends(get_current_actor),
     session: AsyncSession = Depends(get_catalog_session),
 ) -> RpaRegisterResult:
@@ -33,7 +35,9 @@ async def register_from_image(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Imagem vazia")
     try:
         service = RpaService(AssetRepository(session))
-        return await service.register_from_image(content, tag, auto_create, actor)
+        return await service.register_from_image(
+            content, tag, auto_create, actor, image_source, visual_condition
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
