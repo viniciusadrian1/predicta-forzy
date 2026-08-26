@@ -97,7 +97,11 @@ services:
       ENVIRONMENT: production
       LOG_LEVEL: INFO
       POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      # Porta INTERNA do container (5432). O default 5434 do config e so pro dev
+      # local, onde o Timescale e publicado nessa porta no host.
       TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: "5432"
       REDIS_HOST: redis
       CHROMA_HOST: chromadb
       OPCUA_ENDPOINT: opc.tcp://opcua-simulator:4840/forzy/server/
