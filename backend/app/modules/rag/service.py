@@ -50,9 +50,14 @@ class RagService:
             chroma_port=settings.chroma_port,
         )
         self._retriever = Retriever(self._embedder, self._store)
+        api_key = (
+            settings.openai_api_key
+            if settings.llm_provider == "openai"
+            else settings.anthropic_api_key
+        )
         self._llm = LlmClient(
             provider=settings.llm_provider,
-            api_key=settings.anthropic_api_key,
+            api_key=api_key,
             model=settings.llm_model,
         )
         self._indexed = False
@@ -150,19 +155,19 @@ class RagService:
         parts.append(
             "\nObservação: resposta gerada em modo offline (sem LLM), de forma "
             "extrativa a partir da documentação recuperada. Configure "
-            "ANTHROPIC_API_KEY para respostas em linguagem natural. Confirme "
+            "OPENAI_API_KEY para respostas em linguagem natural. Confirme "
             "sempre com a equipe de manutenção antes de qualquer intervenção."
         )
         return "\n".join(parts)
 
-    async def _anthropic_answer(
+    async def _llm_answer(
         self, request: ChatRequest, chunks: list[RetrievedChunk], asset_context: str | None
     ) -> str:
         messages = self._build_messages(request, chunks, asset_context)
         try:
-            parts = [token async for token in self._llm.stream_anthropic(SYSTEM_PROMPT, messages)]
+            parts = [token async for token in self._llm.stream(SYSTEM_PROMPT, messages)]
         except Exception as exc:  # pragma: no cover - depende de rede/credencial
-            logger.warning("Falha na chamada Anthropic (%s); usando modo offline.", exc)
+            logger.warning("Falha na chamada ao LLM (%s); usando modo offline.", exc)
             return self._offline_answer(request.message, chunks, asset_context)
         text = "".join(parts).strip()
         return text or self._offline_answer(request.message, chunks, asset_context)
@@ -172,8 +177,8 @@ class RagService:
         await self._ensure_indexed()
         chunks = self._retriever.search(request.message, self._settings.rag_top_k)
         mode = self._llm.mode
-        if mode == "anthropic":
-            answer = await self._anthropic_answer(request, chunks, asset_context)
+        if mode != "offline":
+            answer = await self._llm_answer(request, chunks, asset_context)
         else:
             answer = self._offline_answer(request.message, chunks, asset_context)
         self._log_chat(request, chunks, mode)
@@ -204,14 +209,14 @@ class RagService:
         )
 
         collected = ""
-        if mode == "anthropic":
+        if mode != "offline":
             try:
                 messages = self._build_messages(request, chunks, asset_context)
-                async for token in self._llm.stream_anthropic(SYSTEM_PROMPT, messages):
+                async for token in self._llm.stream(SYSTEM_PROMPT, messages):
                     collected += token
                     yield ("token", {"text": token})
             except Exception as exc:  # pragma: no cover - depende de rede/credencial
-                logger.warning("Streaming Anthropic falhou (%s); usando modo offline.", exc)
+                logger.warning("Streaming do LLM falhou (%s); usando modo offline.", exc)
 
         if not collected.strip():
             offline = self._offline_answer(request.message, chunks, asset_context)

@@ -1,10 +1,10 @@
 """Cliente de LLM do assistente, com degradacao graciosa.
 
-Quando ``ANTHROPIC_API_KEY`` esta configurada, o assistente usa a API de
-mensagens da Anthropic em modo *streaming*. Sem a chave, opera em modo
-*offline*: a resposta e composta de forma extrativa a partir dos trechos
-recuperados (ver ``RagService``). Assim o chat funciona na demo mesmo sem
-credenciais de LLM.
+Com a chave do provedor configurado (``OPENAI_API_KEY`` para ``openai`` ou
+``ANTHROPIC_API_KEY`` para ``anthropic``), o assistente gera a resposta em modo
+*streaming*. Sem a chave, opera em modo *offline*: a resposta e composta de
+forma extrativa a partir dos trechos recuperados (ver ``RagService``). Assim o
+chat funciona na demo mesmo sem credenciais de LLM.
 """
 
 from __future__ import annotations
@@ -21,12 +21,13 @@ logger = logging.getLogger("forzy.rag.llm")
 
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _ANTHROPIC_VERSION = "2023-06-01"
+_OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _MAX_TOKENS = 1024
 _STREAM_WORD_RE = re.compile(r"\S+\s*")
 
 
 class LlmClient:
-    """Encapsula a chamada ao provedor de LLM (Anthropic) em modo streaming."""
+    """Encapsula a chamada ao provedor de LLM (OpenAI/Anthropic) em streaming."""
 
     def __init__(self, *, provider: str, api_key: str, model: str) -> None:
         self._provider = provider
@@ -35,10 +36,52 @@ class LlmClient:
 
     @property
     def mode(self) -> str:
-        """Modo efetivo: ``anthropic`` se houver credencial, senao ``offline``."""
-        if self._provider == "anthropic" and self._api_key:
-            return "anthropic"
+        """Modo efetivo: o provider (``openai``/``anthropic``) se houver
+        credencial, senao ``offline``."""
+        if self._api_key and self._provider in ("openai", "anthropic"):
+            return self._provider
         return "offline"
+
+    def stream(self, system: str, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        """Despacha o streaming para o provider configurado."""
+        if self._provider == "openai":
+            return self.stream_openai(system, messages)
+        return self.stream_anthropic(system, messages)
+
+    async def stream_openai(
+        self, system: str, messages: list[dict[str, str]]
+    ) -> AsyncIterator[str]:
+        """Faz streaming da resposta da API OpenAI (chat completions), token a token."""
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self._model,
+            "max_tokens": _MAX_TOKENS,
+            # OpenAI espera o system dentro do array de mensagens.
+            "messages": [{"role": "system", "content": system}, *messages],
+            "stream": True,
+        }
+        async with (
+            httpx.AsyncClient(timeout=60.0) as client,
+            client.stream("POST", _OPENAI_URL, headers=headers, json=payload) as response,
+        ):
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                raw = line[len("data:") :].strip()
+                if not raw or raw == "[DONE]":
+                    continue
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                choices = event.get("choices") or [{}]
+                text = choices[0].get("delta", {}).get("content") or ""
+                if text:
+                    yield text
 
     async def stream_anthropic(
         self, system: str, messages: list[dict[str, str]]

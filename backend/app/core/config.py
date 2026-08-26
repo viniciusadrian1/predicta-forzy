@@ -76,8 +76,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
     # --- LLM (chat de troubleshooting com RAG) ---
-    llm_provider: str = "anthropic"
-    llm_model: str = "claude-3-5-haiku-20241022"
+    # provider "openai" | "anthropic". Sem a chave do provider, o chat cai no
+    # modo offline (resposta extrativa a partir da base recuperada).
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 

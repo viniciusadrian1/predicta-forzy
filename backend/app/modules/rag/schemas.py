@@ -35,7 +35,7 @@ class ChatResponse(BaseModel):
     """Resposta do assistente, com as fontes citadas."""
 
     answer: str
-    mode: Literal["anthropic", "offline"]
+    mode: Literal["openai", "anthropic", "offline"]
     sources: list[RagSource]
     asset_tag: str | None = None
     used_asset_context: bool = False
@@ -48,7 +48,7 @@ class RagStatus(BaseModel):
     indexed_chunks: int = 0
     documents: int = 0
     vector_backend: str = "memory"
-    llm_mode: Literal["anthropic", "offline"] = "offline"
+    llm_mode: Literal["openai", "anthropic", "offline"] = "offline"
     embedding_dim: int = 0
 
 
