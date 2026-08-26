@@ -12,6 +12,7 @@ estruturado (governanca de ML).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -80,6 +81,9 @@ class MlService:
     def __init__(self) -> None:
         # Um modelo por ativo: evita aplicar o modelo do MTR-001 a outros motores.
         self._bundles: dict[str, ModelBundle] = {}
+        # Lock por ativo: serializa o treino do mesmo motor (evita o avaliador de
+        # alertas e uma requisicao HTTP dispararem o mesmo treino em paralelo).
+        self._locks: dict[str, asyncio.Lock] = {}
 
     @property
     def ready(self) -> bool:
@@ -153,19 +157,11 @@ class MlService:
         present = [column for column in SENSOR_ORDER if column in wide.columns]
         return wide.dropna(subset=present)
 
-    async def train(self, session: AsyncSession, asset_tag: str = "MTR-001") -> bool:
-        """Treina os modelos DESTE ativo com as variaveis que ele realmente tem."""
-        wide = await self._fetch_history(session, asset_tag)
-        available = [column for column in SENSOR_ORDER if column in wide.columns]
-        if len(wide) < MIN_TRAINING_SAMPLES or not available:
-            logger.warning(
-                "ML: dados insuficientes para treino de %s (%d amostras, %d features)",
-                asset_tag,
-                len(wide),
-                len(available),
-            )
-            return False
-
+    def _fit_bundle(self, wide: pd.DataFrame, available: list[str]) -> ModelBundle:
+        """Parte CPU-bound do treino (sklearn). Roda via ``asyncio.to_thread``
+        para NAO bloquear o event loop do uvicorn - no free tier (1 worker) o
+        ``.fit()`` sincrono travava toda a API enquanto treinava.
+        """
         features = wide[available].to_numpy(dtype=float)
         baseline = IsolationForest(n_estimators=120, contamination=0.03, random_state=42)
         baseline.fit(features)
@@ -183,7 +179,7 @@ class MlService:
                 errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
                 threshold = float(np.percentile(errors, 99))
 
-        bundle = ModelBundle(
+        return ModelBundle(
             version=datetime.now(UTC).strftime("v%Y%m%d%H%M%S"),
             trained_at=datetime.now(UTC),
             n_samples=int(len(wide)),
@@ -192,6 +188,22 @@ class MlService:
             autoencoder=autoencoder,
             anomaly_threshold=threshold,
         )
+
+    async def train(self, session: AsyncSession, asset_tag: str = "MTR-001") -> bool:
+        """Treina os modelos DESTE ativo com as variaveis que ele realmente tem."""
+        wide = await self._fetch_history(session, asset_tag)
+        available = [column for column in SENSOR_ORDER if column in wide.columns]
+        if len(wide) < MIN_TRAINING_SAMPLES or not available:
+            logger.warning(
+                "ML: dados insuficientes para treino de %s (%d amostras, %d features)",
+                asset_tag,
+                len(wide),
+                len(available),
+            )
+            return False
+
+        # sklearn (CPU-bound) fora do event loop -> a API continua respondendo.
+        bundle = await asyncio.to_thread(self._fit_bundle, wide, available)
         self._bundles[asset_tag] = bundle
         logger.info(
             "ML: modelos treinados asset=%s (%d amostras, features=%s, versao %s)",
@@ -203,8 +215,13 @@ class MlService:
         return True
 
     async def _ensure(self, session: AsyncSession, asset_tag: str) -> None:
-        if asset_tag not in self._bundles:
-            await self.train(session, asset_tag)
+        if asset_tag in self._bundles:
+            return
+        # Serializa por ativo e re-checa: so um treino por motor de cada vez.
+        lock = self._locks.setdefault(asset_tag, asyncio.Lock())
+        async with lock:
+            if asset_tag not in self._bundles:
+                await self.train(session, asset_tag)
 
     async def predict_baseline(self, session: AsyncSession, asset_tag: str) -> BaselinePrediction:
         await self._ensure(session, asset_tag)
