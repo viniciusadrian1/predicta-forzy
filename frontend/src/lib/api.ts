@@ -46,6 +46,27 @@ export class ApiError extends Error {
   }
 }
 
+/** fetch com timeout: evita a tela travada quando o backend nao responde
+ * (comum no free tier do Render, que hiberna e leva ~30-60s pra acordar). */
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit = {},
+  timeoutMs = 60000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Servidor sem resposta (pode estar acordando — tente de novo).", 0);
+    }
+    throw new ApiError("Falha de conexao com a API.", 0);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = response.statusText;
@@ -67,7 +88,7 @@ async function parse<T>(response: Response): Promise<T> {
 }
 
 export async function login(username: string, password: string): Promise<AuthToken> {
-  const response = await fetch(apiUrl("/auth/login"), {
+  const response = await fetchWithTimeout(apiUrl("/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -78,7 +99,7 @@ export async function login(username: string, password: string): Promise<AuthTok
 /** Valida a sessão persistida contra a API (token expirado cai no 401 global). */
 export async function getMe(): Promise<{ username: string; role: string }> {
   return parse(
-    await fetch(apiUrl("/auth/me"), { headers: authHeaders(), cache: "no-store" }),
+    await fetchWithTimeout(apiUrl("/auth/me"), { headers: authHeaders(), cache: "no-store" }),
   );
 }
 
