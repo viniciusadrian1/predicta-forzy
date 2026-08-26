@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     external_sensors_map: str = "MTR-F01:/get_s1,MTR-F02:/get_s2"
     external_sensors_poll_seconds: float = 30.0
 
+    # --- Simulador de demo (deploy publico sem OPC-UA) ---
+    # Gera telemetria recente para os 3 motores (MTR-001 fisico + replay real
+    # de MTR-F01/F02) para os cards ficarem "AO VIVO" e os graficos preenchidos.
+    # Desligado localmente (o docker-compose usa o simulador OPC-UA real).
+    demo_simulator: bool = False
+    demo_simulator_interval_seconds: float = 12.0
+    demo_simulator_load: float = 0.75  # carga do MTR-001 (0..1)
+    demo_history_csv: str = "data/history_forzy_iolink.csv"
+
     # --- Alertas: ativos avaliados pelo verificador periodico ---
     monitored_asset_tags: str = "MTR-001,MTR-F01,MTR-F02"
     # Webhook para notificar alertas >= WARNING (Teams/Slack/CMMS). Vazio = so grava.

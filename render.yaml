@@ -45,6 +45,10 @@ services:
         value: memory
       - key: EXTERNAL_SENSORS_BASE_URL
         value: ""
+      # Sem OPC-UA no Render: simulador gera telemetria recente dos 3 motores
+      # (MTR-001 fisico + replay real de MTR-F01/F02) -> cards AO VIVO + graficos.
+      - key: DEMO_SIMULATOR
+        value: "true"
       # Origem do frontend (CORS). Ajuste se a URL do front for outra.
       - key: CORS_ORIGINS
         value: https://predicta-forzy-frontend.onrender.com

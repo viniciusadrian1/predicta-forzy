@@ -34,6 +34,7 @@ from app.modules.governance.middleware import AuditMiddleware
 from app.modules.governance.router import router as governance_router
 from app.modules.ml.router import router as ml_router
 from app.modules.rag.router import router as rag_router
+from app.modules.telemetry.demo_sim import DemoSimulatorService
 from app.modules.telemetry.external import ExternalSensorsService
 from app.modules.telemetry.ingestion import TelemetryIngestionService
 from app.modules.telemetry.router import router as telemetry_router
@@ -86,9 +87,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     ingestion: TelemetryIngestionService | None = None
     external: ExternalSensorsService | None = None
+    demo_sim: DemoSimulatorService | None = None
     if settings.feature_telemetry:
-        ingestion = TelemetryIngestionService(settings)
-        ingestion.start()
+        if settings.demo_simulator:
+            # Deploy publico (sem OPC-UA): o simulador de demo e a fonte de dados.
+            demo_sim = DemoSimulatorService(settings)
+            demo_sim.start()
+        else:
+            ingestion = TelemetryIngestionService(settings)
+            ingestion.start()
         # Sensores fisicos Forzy (API HTTP): ativos apenas com URL configurada.
         if settings.external_sensors_base_url:
             external = ExternalSensorsService(settings)
@@ -102,6 +109,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await ingestion.stop()
     if external is not None:
         await external.stop()
+    if demo_sim is not None:
+        await demo_sim.stop()
     if settings.feature_alerts:
         await alerts_evaluator.stop()
 
