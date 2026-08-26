@@ -89,6 +89,9 @@ services:
       args:
         PIP_EXTRAS: "[rag]"
     container_name: predicta-backend
+    # start.sh: migracoes (alembic) + seed (usuarios/ativos) + import do
+    # historico real -> sobe o uvicorn. Sem isso o catalogo subiria vazio.
+    command: sh start.sh
     env_file: .env
     environment:
       ENVIRONMENT: production
@@ -121,10 +124,12 @@ services:
       interval: 15s
       timeout: 5s
       retries: 12
-      start_period: 40s
+      # 1o boot roda alembic + seed + import antes do uvicorn -> mais folga.
+      start_period: 90s
     deploy:
       resources:
-        limits: { cpus: "1.5", memory: 1G }
+        # 2G: o treino de ML (sklearn) tem pico de memoria; 512M-1G da OOM.
+        limits: { cpus: "2.0", memory: 2G }
     restart: always
 
   frontend:
