@@ -29,8 +29,9 @@ services:
     dockerContext: ./backend
     plan: free
     healthCheckPath: /health
-    # Roda as migracoes + o seed (idempotente) antes de cada deploy.
-    preDeployCommand: "alembic upgrade head && python -m app.scripts.seed"
+    # Free tier nao permite preDeployCommand: rodamos migracoes + seed
+    # (idempotentes) no proprio start e subimos o uvicorn na porta do Render.
+    dockerCommand: 'sh -c "alembic upgrade head && python -m app.scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT"'
     envVars:
       # Mantem o login-demo do grupo (o guard de producao NAO dispara em development).
       - key: ENVIRONMENT
