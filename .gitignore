@@ -1,3 +1,8 @@
+# === Manuais WEG (copyright) ===
+# Ficam apenas no servidor (rag/documents/), alimentando o RAG internamente.
+# Nao versionar/redistribuir os PDFs do fabricante no repo publico.
+rag/documents/WEG-*.pdf
+
 # === Python ===
 __pycache__/
 *.py[cod]
