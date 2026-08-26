@@ -7,6 +7,20 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _to_asyncpg(url: str) -> str:
+    """Normaliza uma URL de Postgres para o driver asyncpg, sem querystring.
+
+    Aceita ``postgres://`` / ``postgresql://`` (Neon, Supabase, Heroku) e
+    descarta ``?sslmode=...`` (o SSL e tratado via connect_args).
+    """
+    url = url.split("?", 1)[0]
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    return url
+
+
 class Settings(BaseSettings):
     """Configuracao tipada, carregada de variaveis de ambiente / arquivo .env."""
 
@@ -17,6 +31,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     api_v1_prefix: str = "/api/v1"
+
+    # --- Banco externo unico (Neon/Supabase): sobrepoe catalogo E telemetria ---
+    # Se definido, catalogo e telemetria usam o MESMO Postgres externo (com SSL).
+    # Vazio = usa as variaveis POSTGRES_*/TIMESCALE_* abaixo (Docker local).
+    database_url: str = ""
 
     # --- PostgreSQL (catalogo) ---
     postgres_host: str = "localhost"
@@ -112,6 +131,8 @@ class Settings(BaseSettings):
     @property
     def catalog_database_url(self) -> str:
         """URL assincrona (asyncpg) do banco de catalogo."""
+        if self.database_url:
+            return _to_asyncpg(self.database_url)
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -119,11 +140,22 @@ class Settings(BaseSettings):
 
     @property
     def timeseries_database_url(self) -> str:
-        """URL assincrona (asyncpg) do banco de series temporais."""
+        """URL assincrona (asyncpg) do banco de series temporais.
+
+        Com ``database_url`` definido, usa o MESMO Postgres externo do catalogo
+        (as tabelas de telemetria convivem com as do catalogo no mesmo banco).
+        """
+        if self.database_url:
+            return _to_asyncpg(self.database_url)
         return (
             f"postgresql+asyncpg://{self.timescale_user}:{self.timescale_password}"
             f"@{self.timescale_host}:{self.timescale_port}/{self.timescale_db}"
         )
+
+    @property
+    def db_connect_args(self) -> dict[str, object]:
+        """Args de conexao: exige SSL quando aponta para um Postgres externo."""
+        return {"ssl": "require"} if self.database_url else {}
 
     @property
     def cors_origins_list(self) -> list[str]:

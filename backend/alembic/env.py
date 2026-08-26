@@ -55,6 +55,7 @@ async def _run_async_migrations() -> None:
         {"sqlalchemy.url": _url()},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=_settings.db_connect_args,  # SSL quando Postgres externo (Neon/Supabase)
     )
     async with engine.connect() as connection:
         await connection.run_sync(_do_run_migrations)

@@ -50,13 +50,18 @@ class TimestampMixin:
     )
 
 
-catalog_engine = create_async_engine(_settings.catalog_database_url, echo=False, pool_pre_ping=True)
+# connect_args exige SSL quando aponta para um Postgres externo (Neon/Supabase).
+_connect_args = _settings.db_connect_args
+
+catalog_engine = create_async_engine(
+    _settings.catalog_database_url, echo=False, pool_pre_ping=True, connect_args=_connect_args
+)
 catalog_session_factory = async_sessionmaker(
     catalog_engine, expire_on_commit=False, class_=AsyncSession
 )
 
 timeseries_engine = create_async_engine(
-    _settings.timeseries_database_url, echo=False, pool_pre_ping=True
+    _settings.timeseries_database_url, echo=False, pool_pre_ping=True, connect_args=_connect_args
 )
 timeseries_session_factory = async_sessionmaker(
     timeseries_engine, expire_on_commit=False, class_=AsyncSession

@@ -1,24 +1,22 @@
 # Render Blueprint — Predicta (site de testes do grupo).
 #
-# Cria 3 recursos num deploy so:
-#   - predicta-forzy-db        -> PostgreSQL gerenciado (free)
+# Cria 2 servicos num deploy so:
 #   - predicta-forzy-backend   -> FastAPI (Docker) + workers
 #   - predicta-forzy-frontend  -> Next.js
 #
-# TimescaleDB e OPCIONAL: o Postgres do Render nao tem a extensao, entao o
-# backend cai automaticamente para "Postgres simples" (as tabelas de telemetria
-# funcionam como tabelas comuns). O mesmo banco serve catalogo + telemetria.
+# BANCO: usa um Postgres EXTERNO gratuito (Neon ou Supabase) via DATABASE_URL,
+# porque o free tier do Render permite apenas UM banco gerenciado por conta (ja
+# em uso pelo DeliveryHub). Cole a connection string no env var DATABASE_URL do
+# backend (marcado sync:false abaixo) no 1o deploy.
+#
+# TimescaleDB e OPCIONAL: Neon/Supabase nao tem a extensao, entao o backend cai
+# automaticamente para "Postgres simples" (as tabelas de telemetria funcionam
+# como tabelas comuns). O mesmo banco serve catalogo + telemetria.
 #
 # IMPORTANTE (ajustar se o Render mudar os nomes/URLs):
 #   As URLs cruzadas (CORS_ORIGINS e NEXT_PUBLIC_API_URL) assumem os nomes de
 #   servico abaixo. Se o Render adicionar um sufixo aleatorio (nome ja em uso),
 #   corrija as duas variaveis no dashboard depois do 1o deploy.
-
-databases:
-  - name: predicta-forzy-db
-    databaseName: predicta
-    user: predicta
-    plan: free
 
 services:
   # ----------------------- Backend (FastAPI / Docker) -----------------------
@@ -45,48 +43,11 @@ services:
       # Origem do frontend (CORS). Ajuste se a URL do front for outra.
       - key: CORS_ORIGINS
         value: https://predicta-forzy-frontend.onrender.com
-      # --- Postgres (catalogo) ---
-      - key: POSTGRES_HOST
-        fromDatabase:
-          name: predicta-forzy-db
-          property: host
-      - key: POSTGRES_PORT
-        fromDatabase:
-          name: predicta-forzy-db
-          property: port
-      - key: POSTGRES_USER
-        fromDatabase:
-          name: predicta-forzy-db
-          property: user
-      - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: predicta-forzy-db
-          property: password
-      - key: POSTGRES_DB
-        fromDatabase:
-          name: predicta-forzy-db
-          property: database
-      # --- Telemetria -> MESMO Postgres (Timescale opcional) ---
-      - key: TIMESCALE_HOST
-        fromDatabase:
-          name: predicta-forzy-db
-          property: host
-      - key: TIMESCALE_PORT
-        fromDatabase:
-          name: predicta-forzy-db
-          property: port
-      - key: TIMESCALE_USER
-        fromDatabase:
-          name: predicta-forzy-db
-          property: user
-      - key: TIMESCALE_PASSWORD
-        fromDatabase:
-          name: predicta-forzy-db
-          property: password
-      - key: TIMESCALE_DB
-        fromDatabase:
-          name: predicta-forzy-db
-          property: database
+      # --- Banco externo unico (Neon/Supabase) -> catalogo + telemetria ---
+      # Cole a connection string aqui no dashboard (Render nao a versiona).
+      # Formato: postgresql://user:pass@host/db  (o codigo adiciona SSL + asyncpg)
+      - key: DATABASE_URL
+        sync: false
 
   # ----------------------- Frontend (Next.js nativo) -----------------------
   - type: web
