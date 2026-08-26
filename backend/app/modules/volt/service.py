@@ -260,10 +260,10 @@ class VoltService:
         from app.modules.rag.schemas import ChatRequest
         from app.modules.rag.service import rag_service
 
-        asset_context = await self._asset_context(state)
+        resolved_tag, asset_context = await self._asset_context(state, message)
         try:
             response = await rag_service.answer(
-                ChatRequest(message=message[:2000], asset_tag=state.asset_tag),
+                ChatRequest(message=message[:2000], asset_tag=resolved_tag or state.asset_tag),
                 asset_context,
             )
         except Exception:
@@ -280,16 +280,41 @@ class VoltService:
         ]
         return VoltReply(message=response.answer, state=state, sources=sources)
 
-    async def _asset_context(self, state: VoltStateModel) -> str | None:
-        """Contexto leve do ativo em atendimento (leituras atuais) para fundamentar."""
-        if not state.asset_tag:
-            return None
-        latest = await self._telemetry.latest(state.asset_tag)
-        lines = [f"Ativo em atendimento: {state.asset_name or state.asset_tag}"]
+    async def _asset_context(
+        self, state: VoltStateModel, message: str
+    ) -> tuple[str | None, str | None]:
+        """Contexto do ativo (placa + leituras) para fundamentar a resposta.
+
+        Usa o ativo em atendimento ou, se a pergunta citar um codigo, esse ativo -
+        assim 'me fala do MTR-001' ja chega ao LLM com os dados de placa e as
+        leituras atuais, mesmo sem um manual especifico recuperado.
+        Devolve (tag_resolvida, contexto).
+        """
+        tag = state.asset_tag or extract_asset_code(message)
+        if not tag:
+            return None, None
+        asset = await self._assets.get_asset_by_tag(tag)
+        if asset is None:
+            return None, None
+        lines = [f"Ativo: {asset.tag} — {asset.name}" if asset.name else f"Ativo: {asset.tag}"]
+        specs = [
+            ("Fabricante", asset.manufacturer),
+            ("Modelo", asset.model),
+            ("Potência", f"{asset.power_kw} kW" if asset.power_kw else None),
+            ("Tensão", f"{asset.voltage_v} V" if asset.voltage_v else None),
+            ("Corrente nominal", f"{asset.nominal_current_a} A" if asset.nominal_current_a else None),
+            ("Rotação nominal", f"{asset.nominal_rpm} rpm" if asset.nominal_rpm else None),
+            ("Classe de isolamento", asset.insulation_class),
+            ("Grau de proteção", asset.ip_rating),
+        ]
+        specs_txt = "; ".join(f"{key}: {value}" for key, value in specs if value)
+        if specs_txt:
+            lines.append(f"Dados de placa: {specs_txt}")
+        latest = await self._telemetry.latest(asset.tag)
         if latest:
             snapshot = "; ".join(f"{row['variable']}={row['value']}" for row in latest)
             lines.append(f"Leituras atuais: {snapshot}")
-        return "\n".join(lines)
+        return asset.tag, "\n".join(lines)
 
     # ------------------------------ apoio ------------------------------
     def _handoff(

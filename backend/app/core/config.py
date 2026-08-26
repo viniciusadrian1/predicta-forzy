@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     rag_documents_dir: str = "/rag/documents"
     rag_chunk_size: int = 800
     rag_chunk_overlap: int = 150
-    rag_top_k: int = 4
+    rag_top_k: int = 6
     rag_embedding_dim: int = 384
 
     # --- RBAC (controle de acesso baseado em papeis) ---
