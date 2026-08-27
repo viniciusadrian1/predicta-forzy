@@ -76,9 +76,10 @@ async def fault_predict(
 async def rul_estimate(
     tag: str,
     session: AsyncSession = Depends(get_timeseries_session),
+    catalog: AsyncSession = Depends(get_catalog_session),
 ) -> RulEstimate:
     """Estima a vida util remanescente (RUL) do ativo."""
-    return await ml_service.estimate_rul(session, tag)
+    return await ml_service.estimate_rul(session, tag, catalog_session=catalog)
 
 
 @router.post("/ml/feedback", response_model=FeedbackResponse)

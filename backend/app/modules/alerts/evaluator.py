@@ -21,6 +21,7 @@ from app.modules.alerts.models import Alert
 from app.modules.alerts.repository import AlertRepository
 from app.modules.assets.models import Asset
 from app.modules.assets.repository import AssetRepository
+from app.modules.ml.service import ml_service
 from app.modules.telemetry.repository import TelemetryRepository
 
 logger = logging.getLogger("forzy.alerts.evaluator")
@@ -52,6 +53,8 @@ class AlertsEvaluator:
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
         self._running = False
+        # Ciclos consecutivos de anomalia de ML por ativo (gate do alerta advisory).
+        self._anomaly_streak: dict[str, int] = {}
 
     def start(self) -> None:
         if self._task is None:
@@ -120,11 +123,11 @@ class AlertsEvaluator:
                 )
             else:
                 physical += self._threshold_rules(readings, recent, thresholds)
-                # ML advisory (baseline/anomalia/RUL) NAO vira alerta: os modelos
-                # ainda estao mal calibrados no dado de demo e geravam falsos
-                # positivos (ex.: RUL espurio, anomalia em motor saudavel). As
-                # predicoes seguem visiveis na aba "Saude do ativo" (endpoints de
-                # ML); aqui so entram os alertas de LIMITE FISICO, que sao reais.
+                # Anomalia de ML vira alerta CONSULTIVO (INFO): entra na lista de
+                # alertas mas NAO prende o badge (_sync_asset_status usa so
+                # 'physical'). Gate conservador (erro alto por 2 ciclos) evita o
+                # falso-positivo que motivou desligar o ML no dado de demo.
+                candidates += await self._ml_advisory(ts_session, asset_tag)
 
         # Todos (fisicos + ML) viram alertas; so os fisicos definem o status.
         candidates = physical + candidates
@@ -155,6 +158,41 @@ class AlertsEvaluator:
                 await self._notify(alert)
             await self._sync_asset_status(asset_tag, cat_session, physical)
         return created
+
+    async def _ml_advisory(self, session: AsyncSession, asset_tag: str) -> list[Candidate]:
+        """Anomalia de ML como alerta CONSULTIVO (INFO), com gate de 2 ciclos.
+
+        Usa so modelos ja carregados/prontos (``train_if_missing=False``) para nao
+        disparar treino dentro do laco de 30s. Falha de ML nunca quebra a avaliacao.
+        """
+        try:
+            pred = await ml_service.predict_anomaly(session, asset_tag, train_if_missing=False)
+        except Exception:
+            logger.warning("ML advisory falhou (%s)", asset_tag, exc_info=True)
+            self._anomaly_streak.pop(asset_tag, None)
+            return []
+        threshold = pred.threshold
+        error = pred.reconstruction_error
+        # Gate mais duro que o is_anomaly cru: erro > 1.5x o limiar de treino.
+        strong = bool(
+            pred.available and pred.is_anomaly and threshold and error and error > 1.5 * threshold
+        )
+        if not strong:
+            self._anomaly_streak[asset_tag] = 0
+            return []
+        streak = self._anomaly_streak.get(asset_tag, 0) + 1
+        self._anomaly_streak[asset_tag] = streak
+        if streak < 2:
+            return []
+        return [
+            (
+                "INFO",
+                "ANOMALY_DETECTED",
+                f"Consultivo: modelo de anomalia acusou vibração atípica "
+                f"(erro {error:.4f}, limiar {threshold:.4f}).",
+                error,
+            )
+        ]
 
     async def _notify(self, alert: Alert) -> None:
         """Entrega o alerta a um canal externo (webhook), se configurado.

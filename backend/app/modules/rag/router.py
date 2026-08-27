@@ -64,7 +64,7 @@ async def _build_asset_context(
 
     if settings.feature_ml:
         try:
-            rul = await ml_service.estimate_rul(timeseries, asset_tag)
+            rul = await ml_service.estimate_rul(timeseries, asset_tag, catalog_session=catalog)
             if rul.available and rul.rul_days is not None:
                 lines.append(f"RUL estimado: {rul.rul_days} dias ({rul.note})")
             elif rul.note:

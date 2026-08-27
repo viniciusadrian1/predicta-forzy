@@ -198,10 +198,17 @@ export function AssetHealth({ tag }: { tag: string }) {
                     style={{ width: `${rulPercent}%` }}
                   />
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Intervalo: {rul.data.confidence_low_days} —{" "}
-                  {rul.data.confidence_high_days} dias
-                </p>
+                {rul.data.confidence_low_days !== null && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Intervalo: {rul.data.confidence_low_days} —{" "}
+                    {rul.data.confidence_high_days} dias
+                  </p>
+                )}
+                {rul.data.note && (
+                  <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                    {rul.data.note}
+                  </p>
+                )}
               </>
             ) : (
               <p className="mt-2 text-sm text-emerald-400">

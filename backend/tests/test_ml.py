@@ -115,7 +115,12 @@ async def test_ml_rul_estimate(client, timeseries_sessionmaker):
     await _seed_telemetry(timeseries_sessionmaker)
     response = await client.get("/api/v1/ml/rul/MTR-001")
     assert response.status_code == 200
-    assert response.json()["ready"] is True
+    body = response.json()
+    assert body["ready"] is True
+    # Momento de parada limitado pela inspecao semestral do fabricante (180 dias):
+    # sem tendencia no dado semeado, o RUL cai no teto do fabricante.
+    if body["available"] and body["rul_days"] is not None:
+        assert body["rul_days"] <= 180.0
 
 
 async def test_ml_fault_predict_demo(client, timeseries_sessionmaker):

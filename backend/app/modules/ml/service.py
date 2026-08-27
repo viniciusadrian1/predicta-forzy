@@ -28,7 +28,10 @@ from sklearn.neural_network import MLPRegressor
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infra.db.base import catalog_session_factory
 from app.infra.db.timescale import telemetry_processed
+from app.modules.assets.models import Asset
+from app.modules.assets.repository import AssetRepository
 from app.modules.ml.schemas import (
     AnomalyPrediction,
     BaselinePrediction,
@@ -50,8 +53,13 @@ SENSOR_ORDER = (
     "Vibracao_Aceleracao_RMS",
 )
 VIBRATION_VARIABLE = "Vibracao_Velocidade_RMS"
-# Limite de vibracao para fim de vida (DIN ISO 10816/20816, zona D).
+# Limite de vibracao para fim de vida (DIN ISO 10816/20816, zona D). Fallback
+# quando o ativo nao tem limiar proprio; o RUL prefere asset.vib_critical.
 VIBRATION_FAILURE_THRESHOLD = 7.1
+# Dado do fabricante: intervalo de inspecao de rolamento do plano de manutencao
+# (avaliacao SEMESTRAL). Serve de TETO para o "momento de parada" - a
+# recomendacao nunca ultrapassa a inspecao preventiva recomendada.
+MANUFACTURER_INSPECTION_DAYS = 180.0
 WINDOW_SIZE = 16
 MIN_TRAINING_SAMPLES = 80
 # Modelos PRONTOS (treinados offline no dado real da Forzy e versionados no
@@ -353,12 +361,38 @@ class MlService:
             model_version=bundle.version,
         )
 
+    async def _fetch_asset(
+        self, asset_tag: str, catalog_session: AsyncSession | None
+    ) -> Asset | None:
+        """Busca o ativo usando a sessao injetada (testavel) ou a factory global."""
+        if catalog_session is not None:
+            return await AssetRepository(catalog_session).get_asset_by_tag(asset_tag)
+        async with catalog_session_factory() as cat_session:
+            return await AssetRepository(cat_session).get_asset_by_tag(asset_tag)
+
     async def estimate_rul(
-        self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
+        self,
+        session: AsyncSession,
+        asset_tag: str,
+        *,
+        train_if_missing: bool = True,
+        catalog_session: AsyncSession | None = None,
     ) -> RulEstimate:
         await self._ensure(session, asset_tag, train_if_missing=train_if_missing)
         bundle = self._bundles.get(asset_tag)
         version = bundle.version if bundle else None
+
+        # Dado do FABRICANTE: limiar de vibracao POR MOTOR (contrato de metricas
+        # / placa) e o intervalo de inspecao preventiva. O momento de parada
+        # combina a tendencia (historico) com esses limites do fabricante.
+        asset = await self._fetch_asset(asset_tag, catalog_session)
+        failure_threshold = (
+            asset.vib_critical
+            if asset and asset.vib_critical is not None
+            else VIBRATION_FAILURE_THRESHOLD
+        )
+        ceiling = MANUFACTURER_INSPECTION_DAYS
+
         wide = await self._fetch_wide(session, asset_tag, minutes=240)
         if wide.empty or VIBRATION_VARIABLE not in wide.columns or len(wide) < 30:
             return RulEstimate(
@@ -383,32 +417,44 @@ class MlService:
         slope_se_day = (np.sqrt(resid_var / sxx) * 86400.0) if sxx > 0 else 0.0
 
         if slope_per_day <= 0.002:
+            # Sem degradacao mensuravel: o momento de parada passa a ser a
+            # inspecao preventiva do fabricante (nao "vida infinita").
             return RulEstimate(
                 ready=True,
                 available=True,
                 asset_tag=asset_tag,
-                rul_days=None,
+                rul_days=round(ceiling, 1),
                 current_vibration=round(current, 4),
                 trend_mm_s_per_day=round(slope_per_day, 5),
                 model_version=version,
-                note="Sem tendencia de degradacao mensuravel - vida util longa.",
+                note=(
+                    "Sem degradacao mensuravel; parada recomendada pela inspecao "
+                    f"semestral de rolamento do fabricante ({ceiling:.0f} dias)."
+                ),
             )
 
-        remaining = max(VIBRATION_FAILURE_THRESHOLD - current, 0.0)
-        rul_days = remaining / slope_per_day
+        remaining = max(failure_threshold - current, 0.0)
+        rul_vibration = remaining / slope_per_day
+        # Momento de parada = min(condicao por vibracao, inspecao do fabricante).
+        rul_days = min(rul_vibration, ceiling)
         slope_fast = slope_per_day + 2.0 * slope_se_day
         slope_slow = max(slope_per_day - 2.0 * slope_se_day, 0.0005)
+        basis = (
+            f"tendencia de vibracao ate {failure_threshold:.1f} mm/s"
+            if rul_vibration <= ceiling
+            else f"inspecao semestral do fabricante ({ceiling:.0f} dias)"
+        )
         return RulEstimate(
             ready=True,
             available=True,
             asset_tag=asset_tag,
             rul_days=round(rul_days, 1),
-            confidence_low_days=round(remaining / slope_fast, 1),
-            confidence_high_days=round(remaining / slope_slow, 1),
+            confidence_low_days=round(min(remaining / slope_fast, ceiling), 1),
+            confidence_high_days=round(min(remaining / slope_slow, ceiling), 1),
             current_vibration=round(current, 4),
             trend_mm_s_per_day=round(slope_per_day, 5),
             model_version=version,
-            note="Estimativa por tendencia de vibracao ate o limite ISO 10816.",
+            note=f"Momento de parada por {basis} (limiar do motor + plano do fabricante).",
         )
 
     def _load_fault_classifier(self) -> dict[str, Any] | None:
