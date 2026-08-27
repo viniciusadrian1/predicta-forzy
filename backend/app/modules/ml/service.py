@@ -16,8 +16,10 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
@@ -51,6 +53,10 @@ VIBRATION_VARIABLE = "Vibracao_Velocidade_RMS"
 VIBRATION_FAILURE_THRESHOLD = 7.1
 WINDOW_SIZE = 16
 MIN_TRAINING_SAMPLES = 80
+# Modelos PRONTOS (treinados offline no dado real da Forzy e versionados no
+# repositorio). Se existe <tag>.joblib aqui, o serving carrega em vez de
+# retreinar na hora. Sem artefato, cai no retreino sob demanda (fallback).
+ARTIFACTS_DIR = Path(__file__).resolve().parent / "artifacts"
 
 
 def _make_windows(values: np.ndarray, size: int) -> np.ndarray:
@@ -73,6 +79,40 @@ class ModelBundle:
     features: tuple[str, ...] = ()
     autoencoder: Any = None
     anomaly_threshold: float = 0.0
+
+
+def fit_bundle(wide: pd.DataFrame, available: list[str]) -> ModelBundle:
+    """Treina o conjunto de modelos de UM ativo (parte CPU-bound, sklearn).
+
+    Isolada em nivel de modulo para ser reusada tanto pelo treino sob demanda
+    (via ``asyncio.to_thread``) quanto pelo script offline que gera os modelos
+    PRONTOS a partir do dado real. Roda fora do event loop para nao travar a API.
+    """
+    features = wide[available].to_numpy(dtype=float)
+    # Modelos enxutos: cabem na memoria/CPU do free tier (512MB / 0.1 vCPU).
+    baseline = IsolationForest(n_estimators=60, contamination=0.03, random_state=42)
+    baseline.fit(features)
+
+    # Autoencoder de vibracao: so quando ha o sinal de velocidade de vibracao.
+    autoencoder: Any = None
+    threshold = 0.0
+    if VIBRATION_VARIABLE in wide.columns:
+        windows = _make_windows(wide[VIBRATION_VARIABLE].to_numpy(dtype=float), WINDOW_SIZE)
+        if len(windows) >= MIN_TRAINING_SAMPLES:
+            autoencoder = MLPRegressor(hidden_layer_sizes=(8, 4, 8), max_iter=200, random_state=42)
+            autoencoder.fit(windows, windows)
+            errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
+            threshold = float(np.percentile(errors, 99))
+
+    return ModelBundle(
+        version=datetime.now(UTC).strftime("v%Y%m%d%H%M%S"),
+        trained_at=datetime.now(UTC),
+        n_samples=int(len(wide)),
+        baseline=baseline,
+        features=tuple(available),
+        autoencoder=autoencoder,
+        anomaly_threshold=threshold,
+    )
 
 
 class MlService:
@@ -157,39 +197,6 @@ class MlService:
         present = [column for column in SENSOR_ORDER if column in wide.columns]
         return wide.dropna(subset=present)
 
-    def _fit_bundle(self, wide: pd.DataFrame, available: list[str]) -> ModelBundle:
-        """Parte CPU-bound do treino (sklearn). Roda via ``asyncio.to_thread``
-        para NAO bloquear o event loop do uvicorn - no free tier (1 worker) o
-        ``.fit()`` sincrono travava toda a API enquanto treinava.
-        """
-        features = wide[available].to_numpy(dtype=float)
-        # Modelos enxutos: cabem na memoria/CPU do free tier (512MB / 0.1 vCPU).
-        baseline = IsolationForest(n_estimators=60, contamination=0.03, random_state=42)
-        baseline.fit(features)
-
-        # Autoencoder de vibracao: so quando ha o sinal de velocidade de vibracao.
-        autoencoder: Any = None
-        threshold = 0.0
-        if VIBRATION_VARIABLE in wide.columns:
-            windows = _make_windows(wide[VIBRATION_VARIABLE].to_numpy(dtype=float), WINDOW_SIZE)
-            if len(windows) >= MIN_TRAINING_SAMPLES:
-                autoencoder = MLPRegressor(
-                    hidden_layer_sizes=(8, 4, 8), max_iter=200, random_state=42
-                )
-                autoencoder.fit(windows, windows)
-                errors = np.mean((windows - autoencoder.predict(windows)) ** 2, axis=1)
-                threshold = float(np.percentile(errors, 99))
-
-        return ModelBundle(
-            version=datetime.now(UTC).strftime("v%Y%m%d%H%M%S"),
-            trained_at=datetime.now(UTC),
-            n_samples=int(len(wide)),
-            baseline=baseline,
-            features=tuple(available),
-            autoencoder=autoencoder,
-            anomaly_threshold=threshold,
-        )
-
     async def train(self, session: AsyncSession, asset_tag: str = "MTR-001") -> bool:
         """Treina os modelos DESTE ativo com as variaveis que ele realmente tem."""
         wide = await self._fetch_history(session, asset_tag)
@@ -204,7 +211,7 @@ class MlService:
             return False
 
         # sklearn (CPU-bound) fora do event loop -> a API continua respondendo.
-        bundle = await asyncio.to_thread(self._fit_bundle, wide, available)
+        bundle = await asyncio.to_thread(fit_bundle, wide, available)
         self._bundles[asset_tag] = bundle
         logger.info(
             "ML: modelos treinados asset=%s (%d amostras, features=%s, versao %s)",
@@ -215,15 +222,42 @@ class MlService:
         )
         return True
 
+    def _load_shipped(self, asset_tag: str) -> bool:
+        """Carrega o modelo PRONTO do ativo (treinado offline), se existir.
+
+        Prioridade sobre o retreino: se ha um artefato versionado no repo, ele
+        e a fonte da verdade. Qualquer falha ao desserializar (ex.: versao de
+        sklearn incompativel) cai no fallback de retreino, sem derrubar a API.
+        """
+        path = ARTIFACTS_DIR / f"{asset_tag}.joblib"
+        if not path.exists():
+            return False
+        try:
+            self._bundles[asset_tag] = joblib.load(path)
+            logger.info(
+                "ML: modelo pronto carregado asset=%s versao=%s",
+                asset_tag,
+                self._bundles[asset_tag].version,
+            )
+            return True
+        except Exception:
+            logger.exception("ML: falha ao carregar modelo pronto de %s; vai retreinar", asset_tag)
+            return False
+
     async def _ensure(
         self, session: AsyncSession, asset_tag: str, *, train_if_missing: bool = True
     ) -> None:
-        if asset_tag in self._bundles or not train_if_missing:
+        if asset_tag in self._bundles:
             return
-        # Serializa por ativo e re-checa: so um treino por motor de cada vez.
+        # Serializa por ativo e re-checa: so um treino/carga por motor de cada vez.
         lock = self._locks.setdefault(asset_tag, asyncio.Lock())
         async with lock:
-            if asset_tag not in self._bundles:
+            if asset_tag in self._bundles:
+                return
+            # 1) modelo pronto (offline) tem prioridade; 2) senao, retreina.
+            if self._load_shipped(asset_tag):
+                return
+            if train_if_missing:
                 await self.train(session, asset_tag)
 
     async def predict_baseline(

@@ -24,7 +24,9 @@ dependencies = [
     "prometheus-fastapi-instrumentator>=7.0,<8",
     "pillow>=11.0",
     "reportlab>=4.2",
-    "scikit-learn>=1.5",
+    # Pin de minor: o serving carrega .joblib (pickle) gerado no treino offline;
+    # sklearn nao garante compat de pickle entre minors -> travar em 1.8.x.
+    "scikit-learn>=1.8,<1.9",
     "pandas>=2.2",
     "httpx>=0.27",
     "pypdf>=5.0",

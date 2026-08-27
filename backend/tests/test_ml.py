@@ -43,11 +43,13 @@ async def test_ml_train_and_status(client, timeseries_sessionmaker):
 
 
 async def test_per_asset_training_with_partial_sensors(client, timeseries_sessionmaker):
-    # Motor fisico (MTR-F01) so tem vibracao + temperatura, nao os 6 sensores.
-    # O modelo por ativo deve treinar com o que o ativo REALMENTE tem.
+    # Motor com so vibracao + temperatura (sem os 6 sensores). O modelo por ativo
+    # deve treinar sob demanda com o que o ativo REALMENTE tem. Usa um tag SEM
+    # modelo pronto no repo, para exercitar o retreino (nao o loader).
     from app.modules.ml.service import ml_service
 
-    ml_service._bundles.pop("MTR-F01", None)
+    tag = "MTR-PARTIAL"
+    ml_service._bundles.pop(tag, None)
     now = datetime.now(UTC)
     async with timeseries_sessionmaker() as session:
         for index in range(140):
@@ -60,7 +62,7 @@ async def test_per_asset_training_with_partial_sensors(client, timeseries_sessio
                 await session.execute(
                     insert(telemetry_processed).values(
                         time=timestamp,
-                        asset_tag="MTR-F01",
+                        asset_tag=tag,
                         variable=variable,
                         value=value,
                         unit="x",
@@ -69,18 +71,37 @@ async def test_per_asset_training_with_partial_sensors(client, timeseries_sessio
                 )
         await session.commit()
 
-    response = await client.post("/api/v1/ml/baseline/predict", json={"asset_tag": "MTR-F01"})
+    response = await client.post("/api/v1/ml/baseline/predict", json={"asset_tag": tag})
     assert response.status_code == 200
     body = response.json()
     assert body["ready"] is True
     assert body["available"] is True  # treinou e preve mesmo sem os 6 sensores
 
-    # O modelo do F01 usa somente as features que o ativo possui.
-    assert ml_service._bundles["MTR-F01"].features == (
+    # O modelo usa somente as features que o ativo possui.
+    assert ml_service._bundles[tag].features == (
         "Temperatura",
         "Vibracao_Velocidade_RMS",
         "Vibracao_Aceleracao_RMS",
     )
+
+
+def test_load_shipped_model_from_artifact():
+    # O modelo PRONTO do F01 (treinado offline no dado real) carrega do repo e
+    # traz um baseline usavel com as features do motor fisico. Se falhar, o
+    # serving cai no retreino (fallback) - aqui garantimos o caminho feliz.
+    from app.modules.ml.service import ARTIFACTS_DIR, MlService
+
+    if not (ARTIFACTS_DIR / "MTR-F01.joblib").exists():
+        return  # artefato ausente (ambiente sem modelo pronto): nada a testar
+    service = MlService()
+    assert service._load_shipped("MTR-F01") is True
+    bundle = service._bundles["MTR-F01"]
+    assert bundle.features == (
+        "Temperatura",
+        "Vibracao_Velocidade_RMS",
+        "Vibracao_Aceleracao_RMS",
+    )
+    assert bundle.baseline is not None
 
 
 async def test_ml_baseline_predict(client, timeseries_sessionmaker):
