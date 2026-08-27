@@ -21,7 +21,6 @@ from app.modules.alerts.models import Alert
 from app.modules.alerts.repository import AlertRepository
 from app.modules.assets.models import Asset
 from app.modules.assets.repository import AssetRepository
-from app.modules.ml.service import ml_service
 from app.modules.telemetry.repository import TelemetryRepository
 
 logger = logging.getLogger("forzy.alerts.evaluator")
@@ -121,47 +120,11 @@ class AlertsEvaluator:
                 )
             else:
                 physical += self._threshold_rules(readings, recent, thresholds)
-
-                # train_if_missing=False: o avaliador (background) nunca dispara
-                # o treino pesado - so usa modelo ja treinado sob demanda. Evita
-                # picos de CPU/memoria que derrubam o instance no free tier.
-                baseline = await ml_service.predict_baseline(
-                    ts_session, asset_tag, train_if_missing=False
-                )
-                if baseline.available and baseline.decision == "anomalo":
-                    candidates.append(
-                        (
-                            "WARNING",
-                            "BASELINE_DEVIATION",
-                            "Desvio do baseline de operação detectado pelo modelo",
-                            baseline.score,
-                        )
-                    )
-                anomaly = await ml_service.predict_anomaly(
-                    ts_session, asset_tag, train_if_missing=False
-                )
-                if anomaly.available and anomaly.is_anomaly:
-                    candidates.append(
-                        (
-                            "WARNING",
-                            "ANOMALY_DETECTED",
-                            "Anomalia de vibração detectada (autoencoder)",
-                            anomaly.reconstruction_error,
-                        )
-                    )
-                rul = await ml_service.estimate_rul(
-                    ts_session, asset_tag, train_if_missing=False
-                )
-                if rul.available and rul.rul_days is not None and rul.rul_days < RUL_WARNING_DAYS:
-                    severity = "CRITICAL" if rul.rul_days < RUL_CRITICAL_DAYS else "WARNING"
-                    candidates.append(
-                        (
-                            severity,
-                            "RUL_WARNING",
-                            f"RUL estimado em {rul.rul_days:.0f} dias — planejar manutenção",
-                            None,
-                        )
-                    )
+                # ML advisory (baseline/anomalia/RUL) NAO vira alerta: os modelos
+                # ainda estao mal calibrados no dado de demo e geravam falsos
+                # positivos (ex.: RUL espurio, anomalia em motor saudavel). As
+                # predicoes seguem visiveis na aba "Saude do ativo" (endpoints de
+                # ML); aqui so entram os alertas de LIMITE FISICO, que sao reais.
 
         # Todos (fisicos + ML) viram alertas; so os fisicos definem o status.
         candidates = physical + candidates
