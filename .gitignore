@@ -50,9 +50,6 @@ ml/data/synthetic/*
 !ml/data/**/.gitkeep
 !ml/models/.gitkeep
 mlruns/
-# Classificador de falha: pesado (~17MB) e ainda em avaliacao (metricas antes de
-# ligar no serving). Os baselines PRONTOS (MTR-F0x.joblib) SIM sao versionados.
-backend/app/modules/ml/artifacts/fault_classifier*
 
 # === RAG vector store ===
 rag/.chroma/

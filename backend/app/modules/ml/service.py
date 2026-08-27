@@ -32,6 +32,7 @@ from app.infra.db.timescale import telemetry_processed
 from app.modules.ml.schemas import (
     AnomalyPrediction,
     BaselinePrediction,
+    FaultPrediction,
     FeedbackRequest,
     FeedbackResponse,
     MlStatus,
@@ -57,6 +58,32 @@ MIN_TRAINING_SAMPLES = 80
 # repositorio). Se existe <tag>.joblib aqui, o serving carrega em vez de
 # retreinar na hora. Sem artefato, cai no retreino sob demanda (fallback).
 ARTIFACTS_DIR = Path(__file__).resolve().parent / "artifacts"
+# Classificador de TIPO de falha: treinado em dado SIMULADO rotulado. So serve o
+# ativo de demonstracao (a distribuicao casa com o simulador); nos motores reais
+# fica indisponivel ate haver falha real rotulada.
+FAULT_CLASSIFIER_PATH = ARTIFACTS_DIR / "fault_classifier.joblib"
+FAULT_DEMO_TAG = "MTR-001"
+FAULT_FEATURE_WINDOW = 15
+
+
+def build_fault_features(
+    vel: pd.Series, accel: pd.Series, temp: pd.Series
+) -> pd.DataFrame:
+    """Features do classificador de falha (vibracao + temperatura apenas).
+
+    Fonte unica reusada no treino offline e no serving, garantindo paridade de
+    features. Ordem das colunas fixa (o artefato guarda a lista e o serving
+    reindexa por ela).
+    """
+    feats = pd.DataFrame(index=vel.index)
+    for name, series in (("vel", vel), ("accel", accel), ("temp", temp)):
+        feats[name] = series
+        feats[f"{name}_mean"] = series.rolling(FAULT_FEATURE_WINDOW, min_periods=1).mean()
+        feats[f"{name}_std"] = (
+            series.rolling(FAULT_FEATURE_WINDOW, min_periods=1).std().fillna(0.0)
+        )
+    feats["vel_roc"] = vel.diff().abs().fillna(0.0)
+    return feats.fillna(0.0)
 
 
 def _make_windows(values: np.ndarray, size: int) -> np.ndarray:
@@ -124,6 +151,9 @@ class MlService:
         # Lock por ativo: serializa o treino do mesmo motor (evita o avaliador de
         # alertas e uma requisicao HTTP dispararem o mesmo treino em paralelo).
         self._locks: dict[str, asyncio.Lock] = {}
+        # Classificador de falha (carregado uma vez, sob demanda).
+        self._fault_clf: dict[str, Any] | None = None
+        self._fault_clf_loaded = False
 
     @property
     def ready(self) -> bool:
@@ -379,6 +409,63 @@ class MlService:
             trend_mm_s_per_day=round(slope_per_day, 5),
             model_version=version,
             note="Estimativa por tendencia de vibracao ate o limite ISO 10816.",
+        )
+
+    def _load_fault_classifier(self) -> dict[str, Any] | None:
+        """Carrega o classificador de falha do artefato (uma vez)."""
+        if self._fault_clf_loaded:
+            return self._fault_clf
+        self._fault_clf_loaded = True
+        if not FAULT_CLASSIFIER_PATH.exists():
+            return None
+        try:
+            self._fault_clf = joblib.load(FAULT_CLASSIFIER_PATH)
+            logger.info("ML: classificador de falha carregado (simulado)")
+        except Exception:
+            logger.exception("ML: falha ao carregar classificador de falha")
+            self._fault_clf = None
+        return self._fault_clf
+
+    async def predict_fault(self, session: AsyncSession, asset_tag: str) -> FaultPrediction:
+        """Classifica o TIPO de falha atual (so no ativo de demonstracao)."""
+        if asset_tag != FAULT_DEMO_TAG:
+            return FaultPrediction(
+                ready=self.ready,
+                available=False,
+                asset_tag=asset_tag,
+                note="Classificacao de falha (simulada) so no ativo de demonstracao.",
+            )
+        clf = self._load_fault_classifier()
+        if clf is None:
+            return FaultPrediction(ready=self.ready, available=False, asset_tag=asset_tag)
+        wide = await self._fetch_wide(session, asset_tag, minutes=30)
+        needed = ("Vibracao_Velocidade_RMS", "Vibracao_Aceleracao_RMS", "Temperatura")
+        if wide.empty or not all(column in wide.columns for column in needed):
+            return FaultPrediction(ready=True, available=False, asset_tag=asset_tag)
+        feats = build_fault_features(
+            wide["Vibracao_Velocidade_RMS"],
+            wide["Vibracao_Aceleracao_RMS"],
+            wide["Temperatura"],
+        ).reindex(columns=clf["features"], fill_value=0.0)
+        latest = feats.to_numpy(dtype=float)[-1:]
+        model = clf["model"]
+        fault = str(model.predict(latest)[0])
+        confidence = float(np.max(model.predict_proba(latest)))
+        logger.info(
+            "ml_prediction model=fault asset=%s fault=%s conf=%.3f",
+            asset_tag,
+            fault,
+            confidence,
+            extra={"event": "ml_prediction", "asset_tag": asset_tag},
+        )
+        return FaultPrediction(
+            ready=True,
+            available=True,
+            asset_tag=asset_tag,
+            fault=fault,
+            confidence=round(confidence, 3),
+            simulated=True,
+            note="Treinado em dado simulado (motor de demonstracao).",
         )
 
     def record_feedback(self, feedback: FeedbackRequest, actor: str) -> FeedbackResponse:

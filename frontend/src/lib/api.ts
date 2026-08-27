@@ -8,6 +8,7 @@ import type {
   AuthToken,
   BaselinePrediction,
   DataLineage,
+  FaultPrediction,
   HierarchyPlant,
   LatestSnapshot,
   MlFeedback,
@@ -270,6 +271,15 @@ export async function getRul(tag: string): Promise<RulEstimate> {
   return parse<RulEstimate>(
     await fetch(apiUrl(`/ml/rul/${encodeURIComponent(tag)}`), { cache: "no-store" }),
   );
+}
+
+export async function predictFault(tag: string): Promise<FaultPrediction> {
+  const response = await fetch(apiUrl("/ml/fault/predict"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ asset_tag: tag }),
+  });
+  return parse<FaultPrediction>(response);
 }
 
 export interface MlFeedbackInput {

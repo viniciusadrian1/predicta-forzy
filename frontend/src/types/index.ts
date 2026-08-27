@@ -213,6 +213,16 @@ export interface RulEstimate {
   note: string | null;
 }
 
+export interface FaultPrediction {
+  ready: boolean;
+  available: boolean;
+  asset_tag: string | null;
+  fault: string | null;
+  confidence: number | null;
+  simulated: boolean;
+  note: string | null;
+}
+
 // --- Alertas ---
 export interface Alert {
   id: string;

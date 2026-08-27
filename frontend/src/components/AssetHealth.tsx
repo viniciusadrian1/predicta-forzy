@@ -20,6 +20,7 @@ import {
   getRul,
   predictAnomaly,
   predictBaseline,
+  predictFault,
   sendMlFeedback,
 } from "@/lib/api";
 import { useToasts } from "@/lib/toast";
@@ -28,6 +29,15 @@ const SEVERITY_BORDER: Record<string, string> = {
   CRITICAL: "#ef4444",
   WARNING: "#f59e0b",
   INFO: "#64748b",
+};
+
+// Rótulos PT das classes do classificador de falha (modelo simulado).
+const FAULT_LABEL: Record<string, string> = {
+  normal: "Operação normal",
+  bearing_wear: "Desgaste de rolamento",
+  unbalance: "Desbalanceamento",
+  overload: "Sobrecarga",
+  spike: "Pico transiente",
 };
 
 /** Seção "Saúde do ativo": baseline, anomalia, RUL e timeline de alertas. */
@@ -49,6 +59,11 @@ export function AssetHealth({ tag }: { tag: string }) {
     queryKey: ["ml-rul", tag],
     queryFn: () => getRul(tag),
     refetchInterval: 30000,
+  });
+  const fault = useQuery({
+    queryKey: ["ml-fault", tag],
+    queryFn: () => predictFault(tag),
+    refetchInterval: 15000,
   });
   const alerts = useQuery({
     queryKey: ["alerts", tag],
@@ -198,6 +213,29 @@ export function AssetHealth({ tag }: { tag: string }) {
           )}
         </Card>
       </div>
+
+      {fault.data?.available && fault.data.fault && (
+        <Card className="mt-4 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-cyan-400" />
+            <p className="font-medium text-slate-100">
+              Classificação de falha: {FAULT_LABEL[fault.data.fault] ?? fault.data.fault}
+            </p>
+            <span className="rounded-full border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+              simulado
+            </span>
+            {fault.data.confidence !== null && (
+              <span className="text-xs text-slate-500">
+                confiança {Math.round(fault.data.confidence * 100)}%
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Modelo treinado em dado simulado (motor de demonstração). Não aplicado
+            aos motores reais até haver falha real rotulada.
+          </p>
+        </Card>
+      )}
 
       <Card className="mt-4">
         <CardHeader className="flex-row items-center justify-between">

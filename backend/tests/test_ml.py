@@ -118,6 +118,26 @@ async def test_ml_rul_estimate(client, timeseries_sessionmaker):
     assert response.json()["ready"] is True
 
 
+async def test_ml_fault_predict_demo(client, timeseries_sessionmaker):
+    # Classificador de falha (simulado) responde no ativo de demonstracao.
+    await _seed_telemetry(timeseries_sessionmaker)
+    response = await client.post("/api/v1/ml/fault/predict", json={"asset_tag": "MTR-001"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    # Sem artefato no ambiente, available=False (fallback); com artefato, prediz.
+    if body["available"]:
+        assert isinstance(body["fault"], str)
+        assert body["simulated"] is True
+
+
+async def test_ml_fault_predict_only_demo_asset(client):
+    # Nos motores reais o classificador simulado fica indisponivel de proposito.
+    response = await client.post("/api/v1/ml/fault/predict", json={"asset_tag": "MTR-F01"})
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+
+
 async def test_ml_feedback(client):
     response = await client.post(
         "/api/v1/ml/feedback",

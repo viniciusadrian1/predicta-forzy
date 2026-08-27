@@ -65,6 +65,23 @@ class RulEstimate(BaseModel):
     note: str | None = None
 
 
+class FaultPrediction(BaseModel):
+    """Classificacao de TIPO de falha (modelo treinado em dado simulado).
+
+    So disponivel no ativo de demonstracao (MTR-001): o classificador foi
+    treinado no dado sintetico rotulado, cuja distribuicao casa com o simulador.
+    Nos motores reais fica indisponivel ate haver falha real rotulada.
+    """
+
+    ready: bool
+    available: bool = False
+    asset_tag: str | None = None
+    fault: str | None = None
+    confidence: float | None = None
+    simulated: bool = True
+    note: str | None = None
+
+
 class MlStatus(BaseModel):
     """Estado dos modelos de ML em memoria."""
 

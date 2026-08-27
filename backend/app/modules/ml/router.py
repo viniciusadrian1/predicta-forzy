@@ -13,6 +13,7 @@ from app.modules.ml.repository import MlFeedbackRepository
 from app.modules.ml.schemas import (
     AnomalyPrediction,
     BaselinePrediction,
+    FaultPrediction,
     FeedbackOut,
     FeedbackRequest,
     FeedbackResponse,
@@ -60,6 +61,15 @@ async def anomaly_predict(
 ) -> AnomalyPrediction:
     """Detecta anomalia de vibracao por erro de reconstrucao (autoencoder)."""
     return await ml_service.predict_anomaly(session, payload.asset_tag)
+
+
+@router.post("/ml/fault/predict", response_model=FaultPrediction)
+async def fault_predict(
+    payload: PredictRequest,
+    session: AsyncSession = Depends(get_timeseries_session),
+) -> FaultPrediction:
+    """Classifica o tipo de falha atual (modelo simulado, so na demo MTR-001)."""
+    return await ml_service.predict_fault(session, payload.asset_tag)
 
 
 @router.get("/ml/rul/{tag}", response_model=RulEstimate)

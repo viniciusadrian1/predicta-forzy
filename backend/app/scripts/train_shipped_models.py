@@ -41,6 +41,7 @@ from sklearn.model_selection import train_test_split
 from app.modules.ml.service import (
     ARTIFACTS_DIR,
     VIBRATION_VARIABLE,
+    build_fault_features,
     fit_bundle,
 )
 
@@ -54,7 +55,6 @@ REAL_MOTORS: dict[str, tuple[int, int, int]] = {
     "MTR-F01": (3, 4, 5),
     "MTR-F02": (6, 7, 8),
 }
-ROLL_WINDOW = 15  # janela das estatisticas moveis do classificador
 
 
 def _rule(char: str = "-") -> str:
@@ -122,28 +122,17 @@ def train_real_baselines() -> None:
 # --------------------------------------------------------------------------- #
 # 2) CLASSIFICADOR DE TIPO DE FALHA (dado sintetico rotulado)
 # --------------------------------------------------------------------------- #
-def _build_fault_features(frame: pd.DataFrame) -> pd.DataFrame:
-    """Features SO de vibracao + temperatura (deployaveis nos motores reais)."""
-    base = {
-        "vel": frame["vibration_velocity_rms"],
-        "accel": frame["vibration_acceleration_rms"],
-        "temp": frame["temperature_c"],
-    }
-    feats = pd.DataFrame(index=frame.index)
-    for name, series in base.items():
-        feats[name] = series
-        feats[f"{name}_mean"] = series.rolling(ROLL_WINDOW, min_periods=1).mean()
-        feats[f"{name}_std"] = series.rolling(ROLL_WINDOW, min_periods=1).std().fillna(0.0)
-    feats["vel_roc"] = base["vel"].diff().abs().fillna(0.0)
-    return feats.fillna(0.0)
-
-
 def train_fault_classifier() -> dict:
     print("\n" + _rule("="))
     print("2) CLASSIFICADOR DE TIPO DE FALHA — dado SINTETICO rotulado")
     print(_rule("="))
     frame = pd.read_csv(SYNTHETIC_CSV).sort_values("time").reset_index(drop=True)
-    features = _build_fault_features(frame)
+    # Mesmo feature-builder do serving (paridade garantida).
+    features = build_fault_features(
+        frame["vibration_velocity_rms"],
+        frame["vibration_acceleration_rms"],
+        frame["temperature_c"],
+    )
     labels = frame["label"].to_numpy()
 
     print("\n  distribuicao das classes:")
@@ -157,9 +146,11 @@ def train_fault_classifier() -> dict:
         random_state=42,
         stratify=labels,
     )
+    # Compacto de proposito (profundidade limitada): o problema e facil e o
+    # artefato precisa ser leve para ser versionado no repo (vai na imagem).
     clf = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=None,
+        n_estimators=80,
+        max_depth=16,
         class_weight="balanced_subsample",
         random_state=42,
         n_jobs=-1,
