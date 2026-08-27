@@ -13,6 +13,20 @@ function toSeverity(value: string): ToastSeverity {
   return "info";
 }
 
+// Rótulos em português para o cabeçalho do toast (o backend usa códigos).
+const SEVERITY_LABEL: Record<string, string> = {
+  CRITICAL: "Crítico",
+  WARNING: "Atenção",
+};
+const TYPE_LABEL: Record<string, string> = {
+  THRESHOLD_EXCEEDED: "Limite excedido",
+  THRESHOLD_APPROACHING: "Aproximando do limite",
+  BASELINE_DEVIATION: "Desvio do padrão de operação",
+  ANOMALY_DETECTED: "Anomalia de vibração",
+  RUL_WARNING: "Vida útil (RUL)",
+  CIRCUIT_BREAKER: "Dado não confiável",
+};
+
 /**
  * Observa os alertas ativos e dispara toasts para os novos.
  * Componente sem UI; renderizado uma vez no layout raiz.
@@ -42,7 +56,9 @@ export function AlertWatcher() {
       if (seen.current.has(alert.id)) continue;
       seen.current.add(alert.id);
       push({
-        title: `${alert.severity}: ${alert.alert_type}`,
+        title: `${SEVERITY_LABEL[alert.severity] ?? alert.severity} · ${
+          TYPE_LABEL[alert.alert_type] ?? alert.alert_type
+        }`,
         description: alert.message,
         severity: toSeverity(alert.severity),
         href: `/asset/${alert.asset_tag}`,
