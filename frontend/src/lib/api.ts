@@ -355,11 +355,15 @@ export async function voltGreeting(): Promise<VoltReply> {
   return parse<VoltReply>(await fetch(apiUrl("/volt/greeting"), { cache: "no-store" }));
 }
 
-export async function voltMessage(message: string, state: VoltState | null): Promise<VoltReply> {
+export async function voltMessage(
+  message: string,
+  state: VoltState | null,
+  history: { role: "user" | "bot"; text: string }[] = [],
+): Promise<VoltReply> {
   const response = await fetch(apiUrl("/volt/message"), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ message, state: state ?? {} }),
+    body: JSON.stringify({ message, state: state ?? {}, history }),
   });
   return parse<VoltReply>(response);
 }

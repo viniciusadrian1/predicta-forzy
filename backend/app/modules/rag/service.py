@@ -110,6 +110,11 @@ class RagService:
             embedding_dim=self._settings.rag_embedding_dim,
         )
 
+    async def retrieve(self, query: str, top_k: int | None = None) -> list[RetrievedChunk]:
+        """Recupera trechos relevantes (sem gerar resposta). Usado pelo agente."""
+        await self._ensure_indexed()
+        return self._retriever.search(query, top_k or self._settings.rag_top_k)
+
     # -- chat ---------------------------------------------------------------
 
     def _sources(self, chunks: list[RetrievedChunk]) -> list[RagSource]:

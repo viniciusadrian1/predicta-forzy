@@ -18,7 +18,9 @@ import re
 from app.core.config import Settings
 from app.core.rbac import has_required_role, rbac_enforced
 from app.modules.assets.repository import AssetRepository
+from app.modules.rag.llm import LlmClient
 from app.modules.telemetry.repository import TelemetryRepository
+from app.modules.volt.agent import VoltAgent
 from app.modules.volt.diagnosis import diagnose
 from app.modules.volt.models import WorkOrder
 from app.modules.volt.nlu import (
@@ -80,12 +82,44 @@ class VoltService:
         self._critical = {
             t.strip() for t in settings.volt_critical_asset_tags.split(",") if t.strip()
         }
+        # Agente generativo (function calling): ativo quando ha chave OpenAI.
+        # Sem chave, o Volt segue no fluxo de regras deterministico abaixo.
+        api_key = (
+            settings.openai_api_key
+            if settings.llm_provider == "openai"
+            else settings.anthropic_api_key
+        )
+        llm = LlmClient(
+            provider=settings.llm_provider, api_key=api_key, model=settings.llm_model
+        )
+        self._agent: VoltAgent | None = (
+            VoltAgent(
+                assets=assets,
+                telemetry=telemetry,
+                work_orders=work_orders,
+                settings=settings,
+                role=role,
+                llm=llm,
+            )
+            if llm.mode == "openai"
+            else None
+        )
 
     # ------------------------------------------------------------------
     async def advance(self, request: VoltRequest) -> VoltReply:
         """Processa a mensagem do usuario e devolve o proximo turno."""
         message = request.message.strip()
         state = request.state.model_copy(deep=True)
+
+        # Assistente unico: com chave OpenAI, o agente (function calling) conduz
+        # todo o turno (dados do ativo + manuais + diagnostico + OS). Sem chave,
+        # segue o fluxo de regras deterministico abaixo.
+        if self._agent is not None and message:
+            try:
+                history = [{"role": turn.role, "text": turn.text} for turn in request.history]
+                return await self._agent.run(message, state, history)
+            except Exception:  # noqa: BLE001 - se o agente falhar, cai nas regras
+                logger.exception("Volt: agente falhou; usando o fluxo de regras.")
 
         # Pedido explicito de humano, em qualquer etapa (guardrail / handoff).
         if message and wants_human(message) and state.step not in ("handoff", "concluido"):

@@ -141,7 +141,13 @@ export function VoltChat() {
   }, [bubbles]);
 
   const mutation = useMutation({
-    mutationFn: (text: string) => voltMessage(text, state),
+    // Envia o histórico (bolhas anteriores) para dar memória ao assistente.
+    mutationFn: (text: string) =>
+      voltMessage(
+        text,
+        state,
+        bubbles.map((bubble) => ({ role: bubble.role, text: bubble.text })),
+      ),
     onSuccess: (reply) => {
       setBubbles((prev) => [...prev, { role: "bot", text: reply.message, reply }]);
       setState(reply.state);

@@ -48,6 +48,32 @@ class LlmClient:
             return self.stream_openai(system, messages)
         return self.stream_anthropic(system, messages)
 
+    async def complete_with_tools(
+        self, messages: list[dict], tools: list[dict]
+    ) -> dict:
+        """Uma rodada de chat (OpenAI) com ferramentas (function calling).
+
+        Devolve a ``message`` crua do assistente - pode conter ``content`` e/ou
+        ``tool_calls``. Usado pelo agente do Volt; requer provider ``openai``.
+        """
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self._model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": 0.2,
+            "max_tokens": _MAX_TOKENS,
+        }
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(_OPENAI_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+        return data["choices"][0]["message"]
+
     async def stream_openai(
         self, system: str, messages: list[dict[str, str]]
     ) -> AsyncIterator[str]:

@@ -27,11 +27,20 @@ class VoltStateModel(BaseModel):
     not_found_attempts: int = 0
 
 
+class VoltTurn(BaseModel):
+    """Um turno anterior da conversa (memoria do agente)."""
+
+    role: Literal["user", "bot", "assistant"] = "user"
+    text: str = Field(default="", max_length=4000)
+
+
 class VoltRequest(BaseModel):
-    """Uma mensagem do usuario + o estado atual do atendimento."""
+    """Uma mensagem do usuario + o estado atual + o historico da conversa."""
 
     message: str = Field(default="", max_length=1000)
     state: VoltStateModel = Field(default_factory=VoltStateModel)
+    # Historico recente (opcional) - da memoria ao assistente generativo.
+    history: list[VoltTurn] = Field(default_factory=list)
 
 
 class DiagnosisOut(BaseModel):
