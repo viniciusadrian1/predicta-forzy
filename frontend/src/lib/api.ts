@@ -47,6 +47,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Descrição de erro para telas de carregamento: distingue sessão/permissão
+ * (401/403) de falha de conexão. Sem isso, um token expirado (que rebaixa o
+ * usuário a viewer → 403) aparecia como "verifique a conexão".
+ */
+export function loadErrorDescription(error: unknown): string {
+  if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+    return "Sua sessão pode ter expirado ou você não tem permissão. Faça login novamente.";
+  }
+  return "Verifique a conexão com a API e tente novamente.";
+}
+
 /** fetch com timeout: evita a tela travada quando o backend nao responde
  * (comum no free tier do Render, que hiberna e leva ~30-60s pra acordar). */
 async function fetchWithTimeout(

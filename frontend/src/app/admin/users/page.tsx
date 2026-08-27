@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listUsers } from "@/lib/api";
+import { listUsers, loadErrorDescription } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 const ROLE_COLOR: Record<string, string> = {
@@ -45,7 +45,7 @@ export default function UsersPage() {
         <EmptyState
           icon={ServerCrash}
           title="Não foi possível carregar os usuários"
-          description="Verifique a conexão com a API e tente novamente."
+          description={loadErrorDescription(usersQuery.error)}
           action={
             <Button variant="outline" onClick={() => void usersQuery.refetch()}>
               Tentar novamente

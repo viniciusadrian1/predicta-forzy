@@ -71,7 +71,10 @@ class Settings(BaseSettings):
     # --- Seguranca ---
     jwt_secret_key: str = "dev-only-secret-change-me-in-production-min32b"
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 15
+    # 8h: cobre uma sessao/turno inteiro. Sem refresh token no front, 15min
+    # expirava no meio do uso e rebaixava o usuario a viewer (403 silencioso nas
+    # telas de admin). Ajustar por env se a politica de seguranca pedir menos.
+    jwt_access_token_expire_minutes: int = 480
     jwt_refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
     # URL base do frontend (links clicaveis do PDF inteligente). Vazio = usa a

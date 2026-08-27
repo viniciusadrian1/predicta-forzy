@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAuditLog } from "@/lib/api";
+import { getAuditLog, loadErrorDescription } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 const METHOD_COLOR: Record<string, string> = {
@@ -80,7 +80,7 @@ export default function AuditPage() {
         <EmptyState
           icon={ServerCrash}
           title="Não foi possível carregar a auditoria"
-          description="Verifique a conexão com a API e tente novamente."
+          description={loadErrorDescription(auditQuery.error)}
           action={
             <Button variant="outline" onClick={() => void auditQuery.refetch()}>
               Tentar novamente

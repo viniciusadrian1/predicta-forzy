@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAccessPolicy, getDataLineage } from "@/lib/api";
+import { getAccessPolicy, getDataLineage, loadErrorDescription } from "@/lib/api";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 const CLASS_COLOR: Record<string, string> = {
@@ -58,6 +58,7 @@ export default function GovernancePage() {
             <EmptyState
               icon={ServerCrash}
               title="Não foi possível carregar a política de acesso"
+              description={loadErrorDescription(policyQuery.error)}
               action={
                 <Button variant="outline" onClick={() => void policyQuery.refetch()}>
                   Tentar novamente
@@ -114,6 +115,7 @@ export default function GovernancePage() {
             <EmptyState
               icon={ServerCrash}
               title="Não foi possível carregar o catálogo de dados"
+              description={loadErrorDescription(lineageQuery.error)}
               action={
                 <Button variant="outline" onClick={() => void lineageQuery.refetch()}>
                   Tentar novamente
