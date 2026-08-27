@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, getAsset, validateAsset } from "@/lib/api";
 import { canValidate, useAuth } from "@/lib/auth";
+import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 interface AssetPageProps {
@@ -59,6 +60,7 @@ export default function AssetPage({ params }: AssetPageProps) {
   usePageTitle(tag);
 
   const role = useAuth((s) => s.role);
+  const pushToast = useToasts((s) => s.push);
   const queryClient = useQueryClient();
   const assetQuery = useQuery({
     queryKey: ["asset", tag],
@@ -68,7 +70,16 @@ export default function AssetPage({ params }: AssetPageProps) {
 
   const validateMutation = useMutation({
     mutationFn: () => validateAsset(tag),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["asset", tag] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset", tag] });
+      pushToast({ title: "Cadastro validado", severity: "info" });
+    },
+    onError: () =>
+      pushToast({
+        title: "Não foi possível validar",
+        description: "Tente novamente em instantes.",
+        severity: "critical",
+      }),
   });
   const showValidate =
     !!asset && canValidate(role) && asset.data_origin === "ia_gerado" && !asset.validated_by;

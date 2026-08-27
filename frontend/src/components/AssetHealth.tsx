@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { alertTypeLabel } from "@/lib/alertLabels";
 import {
   getAlerts,
   getRul,
@@ -226,7 +227,7 @@ export function AssetHealth({ tag }: { tag: string }) {
                     {new Date(alert.created_at).toLocaleString("pt-BR")}
                   </span>
                   <span className="text-xs font-medium text-slate-400">
-                    {alert.alert_type}
+                    {alertTypeLabel(alert.alert_type)}
                   </span>
                   <span className="text-slate-200">{alert.message}</span>
                 </Link>

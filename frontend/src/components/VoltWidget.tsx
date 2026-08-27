@@ -11,6 +11,9 @@ import { VoltChat } from "@/components/VoltChat";
 
 export function VoltWidget() {
   const [open, setOpen] = useState(false);
+  // Monta o chat na 1a abertura e nunca desmonta: preserva a conversa ao
+  // fechar/reabrir (sem refazer a saudacao). Antes o `open &&` desmontava tudo.
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
   // Na página cheia do Volt (ou no login) o widget nao faz sentido.
@@ -18,8 +21,12 @@ export function VoltWidget() {
 
   return (
     <>
-      {open && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[min(560px,75dvh)] w-[min(400px,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      {mounted && (
+        <div
+          className={`fixed bottom-24 right-6 z-50 flex h-[min(560px,75dvh)] w-[min(400px,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl ${
+            open ? "" : "hidden"
+          }`}
+        >
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
             <div className="flex items-center gap-2">
               <Wrench className="h-4 w-4 text-cyan-400" />
@@ -43,7 +50,12 @@ export function VoltWidget() {
 
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() =>
+          setOpen((value) => {
+            if (!value) setMounted(true);
+            return !value;
+          })
+        }
         aria-label={open ? "Fechar o Volt" : "Abrir o Volt"}
         title="Falar com o Volt"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-lg transition-colors hover:bg-cyan-400"

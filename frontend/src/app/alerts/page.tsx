@@ -12,6 +12,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { alertTypeLabel, severityLabel } from "@/lib/alertLabels";
 import { acknowledgeAlert, getAlerts } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
@@ -143,10 +144,10 @@ function AlertsPageInner() {
             <Card key={alert.id} className="p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant={SEVERITY_VARIANT[alert.severity] ?? "default"}>
-                  {alert.severity}
+                  {severityLabel(alert.severity)}
                 </Badge>
                 <span className="text-xs font-medium text-slate-400">
-                  {alert.alert_type}
+                  {alertTypeLabel(alert.alert_type)}
                 </span>
                 <Link
                   href={`/asset/${encodeURIComponent(alert.asset_tag)}`}

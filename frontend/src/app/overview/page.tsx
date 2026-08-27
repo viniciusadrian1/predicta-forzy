@@ -15,6 +15,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { alertTypeLabel, severityLabel } from "@/lib/alertLabels";
 import { acknowledgeAlert, getAlerts, getAssets } from "@/lib/api";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
@@ -172,12 +173,12 @@ export default function OverviewPage() {
                   className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2.5"
                 >
                   <Badge variant={SEVERITY_VARIANT[alert.severity] ?? "default"}>
-                    {alert.severity}
+                    {severityLabel(alert.severity)}
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-slate-200">{alert.message}</p>
                     <p className="text-xs text-slate-500">
-                      {alert.alert_type} · {timeAgo(alert.created_at)} atrás
+                      {alertTypeLabel(alert.alert_type)} · {timeAgo(alert.created_at)} atrás
                     </p>
                   </div>
                   <Link

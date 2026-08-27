@@ -200,6 +200,23 @@ export function VoltChat() {
             </div>
           </div>
         ))}
+        {bubbles.length === 0 && greetingQuery.isLoading && (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Volt está iniciando...
+          </div>
+        )}
+        {bubbles.length === 0 && greetingQuery.isError && (
+          <div className="flex flex-col items-start gap-2 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100">
+            <p>Não consegui iniciar agora. Verifique a conexão.</p>
+            <button
+              type="button"
+              onClick={() => greetingQuery.refetch()}
+              className="rounded-full border border-slate-700 px-3 py-1 text-xs text-cyan-300 hover:border-cyan-500 hover:text-cyan-200"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
         {mutation.isPending && (
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" /> Volt está preparando a resposta...
