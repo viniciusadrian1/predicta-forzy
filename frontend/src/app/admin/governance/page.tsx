@@ -8,10 +8,12 @@ import { ServerCrash, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
+import { RoleMaturityLadder } from "@/components/RoleMaturityLadder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAccessPolicy, getDataLineage, loadErrorDescription } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 const CLASS_COLOR: Record<string, string> = {
@@ -31,6 +33,7 @@ export default function GovernancePage() {
   usePageTitle("Governança");
   const policyQuery = useQuery({ queryKey: ["access-policy"], queryFn: getAccessPolicy });
   const lineageQuery = useQuery({ queryKey: ["data-lineage"], queryFn: getDataLineage });
+  const role = useAuth((s) => s.role);
 
   return (
     <AppShell>
@@ -38,6 +41,16 @@ export default function GovernancePage() {
         <ShieldCheck className="h-5 w-5 text-cyan-400" />
         <h1 className="text-xl font-semibold text-slate-100">Governança</h1>
       </div>
+
+      {/* Níveis de acesso e maturidade (didático) */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Níveis de acesso e maturidade</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RoleMaturityLadder currentRole={role} />
+        </CardContent>
+      </Card>
 
       {/* Matriz RBAC */}
       <Card className="mb-6">

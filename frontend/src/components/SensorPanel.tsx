@@ -49,6 +49,20 @@ function Sparkline({ points, color }: { points: TelemetryPoint[]; color: string 
   );
 }
 
+/** Tooltip inline (CSS puro) — esclarece o rótulo no hover do ícone ⓘ. */
+function HintIcon({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex cursor-help items-center">
+      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-600 text-[9px] text-slate-500 group-hover:border-slate-400 group-hover:text-slate-300">
+        i
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden w-56 -translate-x-1/2 rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] leading-snug text-slate-300 shadow-lg group-hover:block">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 interface SensorPanelProps {
   tag: string;
   variable: string;
@@ -58,6 +72,8 @@ interface SensorPanelProps {
   /** Limiares de severidade — colorem a leitura (âmbar/vermelho) ao exceder. */
   warn?: number;
   crit?: number;
+  /** Texto de esclarecimento opcional (ⓘ ao lado do rótulo). */
+  hint?: string;
 }
 
 export function SensorPanel({
@@ -68,6 +84,7 @@ export function SensorPanel({
   color,
   warn,
   crit,
+  hint,
 }: SensorPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [windowKey, setWindowKey] = useState("1h");
@@ -116,6 +133,7 @@ export function SensorPanel({
         <div>
           <div className="flex items-center gap-2">
             <p className="text-xs text-slate-400">{label}</p>
+            {hint && <HintIcon text={hint} />}
             {mounted &&
               (stale ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-red-950/40 px-1.5 py-0.5 text-[10px] font-medium text-red-400">

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BadgeCheck, SearchX, ServerCrash } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -24,9 +25,24 @@ interface AssetPageProps {
   params: { tag: string };
 }
 
+// Motor 3D (WebGL) carregado só no cliente.
+const MotorViewer3D = dynamic(
+  () => import("@/components/MotorViewer3D").then((m) => m.MotorViewer3D),
+  { ssr: false, loading: () => <Skeleton className="h-80 w-full" /> },
+);
+
 // `variable` são as chaves canônicas da telemetria (OPC-UA) — não traduzir.
 // warn/crit espelham os limiares do avaliador de alertas (ISO 10816 / térmico).
-const SENSORS = [
+type SensorConfig = {
+  variable: string;
+  label: string;
+  unit: string;
+  color: string;
+  warn?: number;
+  crit?: number;
+  hint?: string;
+};
+const SENSORS: SensorConfig[] = [
   { variable: "Tensao", label: "Tensão", unit: "V", color: "#38bdf8" },
   { variable: "Corrente", label: "Corrente", unit: "A", color: "#22d3ee" },
   {
@@ -37,7 +53,13 @@ const SENSORS = [
     warn: 80,
     crit: 95,
   },
-  { variable: "Rotacao", label: "Rotação", unit: "RPM", color: "#a78bfa" },
+  {
+    variable: "Rotacao",
+    label: "Rotação",
+    unit: "RPM",
+    color: "#a78bfa",
+    hint: "Velocidade de rotação do eixo (RPM) — não confundir com a vibração da carcaça.",
+  },
   {
     variable: "Vibracao_Velocidade_RMS",
     label: "Vibração (velocidade)",
@@ -45,6 +67,7 @@ const SENSORS = [
     color: "#34d399",
     warn: 4.5,
     crit: 7.1,
+    hint: "Velocidade de vibração RMS da carcaça (ISO 10816) — mede oscilação, não a rotação do eixo.",
   },
   {
     variable: "Vibracao_Aceleracao_RMS",
@@ -184,6 +207,13 @@ export default function AssetPage({ params }: AssetPageProps) {
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                Modelo 3D do ativo
+              </h2>
+              <MotorViewer3D assetTag={asset.tag} status={asset.status} />
+            </section>
+
+            <section className="mb-6">
+              <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                 Telemetria em tempo real
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -197,6 +227,7 @@ export default function AssetPage({ params }: AssetPageProps) {
                     color={sensor.color}
                     warn={sensor.warn}
                     crit={sensor.crit}
+                    hint={sensor.hint}
                   />
                 ))}
               </div>
