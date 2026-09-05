@@ -171,7 +171,7 @@ export function VoltChat() {
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {bubbles.map((bubble, index) => (
           <div
             key={index}
@@ -226,7 +226,7 @@ export function VoltChat() {
 
       {/* Quick replies (chips de sintoma / falar com humano) */}
       {quickReplies.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-t border-slate-800 px-4 pt-3">
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-slate-800 px-4 pt-3">
           {quickReplies.map((qr) => (
             <button
               key={qr}
@@ -245,7 +245,7 @@ export function VoltChat() {
           event.preventDefault();
           send(input);
         }}
-        className="flex items-center gap-2 border-t border-slate-800 p-3"
+        className="flex shrink-0 items-center gap-2 border-t border-slate-800 p-3"
       >
         <input
           aria-label="Mensagem para o Volt"

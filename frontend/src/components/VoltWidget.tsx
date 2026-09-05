@@ -27,7 +27,7 @@ export function VoltWidget() {
             open ? "" : "hidden"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
             <div className="flex items-center gap-2">
               <Wrench className="h-4 w-4 text-cyan-400" />
               <div>
@@ -44,7 +44,13 @@ export function VoltWidget() {
               <X className="h-5 w-5" />
             </button>
           </div>
-          <VoltChat />
+          {/* min-h-0 + flex-1: o chat ocupa o espaco RESTANTE (o header ja
+              consumiu parte). Sem isso o h-full do chat pedia 100% da altura
+              toda e o formulario transbordava para fora do painel, ficando
+              inclicavel (os cliques caiam na pagina atras). */}
+          <div className="min-h-0 flex-1">
+            <VoltChat />
+          </div>
         </div>
       )}
 
