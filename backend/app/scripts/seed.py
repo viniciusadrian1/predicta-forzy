@@ -87,13 +87,19 @@ async def seed() -> None:
             session.add(asset)
             logger.info("Ativo criado: %s", asset.tag)
 
-        # Sensores fisicos da Forzy (S1/S2) - alimentados pela API HTTP externa.
-        # Limiares por percentil do contrato de metricas (governanca, Tabela 9),
-        # com o mapeamento padrao Porta 1 -> MTR-F01 (M1) e Porta 2 -> MTR-F02 (M2).
-        for tag, sensor_name, pos_x, thresholds in (
+        # Pontos de medicao da BANCADA DE BOMBA DE TESTE da Forzy.
+        #
+        # CORRECAO DE MODELAGEM: MTR-F01 e MTR-F02 NAO sao dois motores. Sao os
+        # DOIS MANCAIS do MESMO conjunto motor-bomba - as unicas duas pecas
+        # identicas do CAD (⌀89,6 x 19,2 mm), simetricas em torno do eixo
+        # central. Um equipamento, dois pontos de medicao IO-Link (Porta 1 ->
+        # mancal lado bomba, Porta 2 -> mancal lado motor).
+        # Limiares por percentil do contrato de metricas (governanca, Tabela 9).
+        BENCH_MODEL = "Bancada bomba de teste R11.06-2130-B01A"
+        for tag, point_name, pos_x, thresholds in (
             (
                 "MTR-F01",
-                "Motor físico Forzy — sensor S1",
+                "Bancada de teste — mancal lado bomba",
                 0.32,
                 {
                     "vib_warning": 6.38,
@@ -104,7 +110,7 @@ async def seed() -> None:
             ),
             (
                 "MTR-F02",
-                "Motor físico Forzy — sensor S2",
+                "Bancada de teste — mancal lado motor",
                 0.68,
                 {
                     "vib_warning": 6.43,
@@ -122,8 +128,9 @@ async def seed() -> None:
                     Asset(
                         tag=tag,
                         asset_type="motor",
-                        name=sensor_name,
+                        name=point_name,
                         manufacturer="Forzy",
+                        model=BENCH_MODEL,
                         voltage_v=220.0,
                         plant_id=plant.id,
                         area_id=area.id,
@@ -135,6 +142,12 @@ async def seed() -> None:
                     )
                 )
                 logger.info("Ativo criado: %s", tag)
+            else:
+                # Idempotente: corrige a nomenclatura antiga ("Motor fisico ...
+                # sensor S1/S2"), que reforcava o erro de "dois motores".
+                existing.name = point_name
+                existing.model = BENCH_MODEL
+                logger.info("Ativo atualizado (nomenclatura): %s", tag)
 
         for username, password, role, full_name in _SEED_USERS:
             user = (

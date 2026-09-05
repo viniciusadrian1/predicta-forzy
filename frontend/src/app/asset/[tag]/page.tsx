@@ -25,11 +25,20 @@ interface AssetPageProps {
   params: { tag: string };
 }
 
-// Motor 3D (WebGL) carregado só no cliente.
+// Modelos 3D (WebGL) carregados só no cliente.
 const MotorViewer3D = dynamic(
   () => import("@/components/MotorViewer3D").then((m) => m.MotorViewer3D),
   { ssr: false, loading: () => <Skeleton className="h-80 w-full" /> },
 );
+const PumpBenchViewer3D = dynamic(
+  () => import("@/components/PumpBenchViewer3D").then((m) => m.PumpBenchViewer3D),
+  { ssr: false, loading: () => <Skeleton className="h-80 w-full" /> },
+);
+
+// MTR-F01/F02 NAO sao dois motores: sao os dois MANCAIS do mesmo conjunto
+// motor-bomba da Forzy. Para eles mostramos a bancada real (CAD), com os dois
+// pontos de medicao; para os demais ativos, o motor generico.
+const BENCH_TAGS = ["MTR-F01", "MTR-F02"];
 
 // `variable` são as chaves canônicas da telemetria (OPC-UA) — não traduzir.
 // warn/crit espelham os limiares do avaliador de alertas (ISO 10816 / térmico).
@@ -207,9 +216,15 @@ export default function AssetPage({ params }: AssetPageProps) {
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Modelo 3D do ativo
+                {BENCH_TAGS.includes(asset.tag)
+                  ? "Gêmeo 3D — bancada de bomba de teste"
+                  : "Modelo 3D do ativo"}
               </h2>
-              <MotorViewer3D assetTag={asset.tag} status={asset.status} />
+              {BENCH_TAGS.includes(asset.tag) ? (
+                <PumpBenchViewer3D activeTag={asset.tag} />
+              ) : (
+                <MotorViewer3D assetTag={asset.tag} status={asset.status} />
+              )}
             </section>
 
             <section className="mb-6">
