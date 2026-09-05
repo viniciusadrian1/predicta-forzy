@@ -13,9 +13,8 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
+import { BenchModel } from "@/components/BenchModel";
 import {
-  BEARING_A_U,
-  BEARING_B_U,
   BENCH,
   BENCH_TAGS,
   axPos,
@@ -248,126 +247,14 @@ const BENCH_CL = 0.55;
 const bx = (u: number) => axPos(u) * BENCH_SCALE;
 const bs = (m: number) => m * BENCH_SCALE;
 
-function BenchTube({
-  u,
-  r,
-  len,
-  color,
-  y = BENCH_CL,
-  roughness = 0.45,
-}: {
-  u: number;
-  r: number;
-  len: number;
-  color: string;
-  y?: number;
-  roughness?: number;
-}) {
+/** A bancada: malha do CAD real da Forzy, escalada para o mundo isometrico. */
+function BenchMesh() {
   return (
-    <mesh position={[bx(u), bs(y), 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
-      <cylinderGeometry args={[bs(r), bs(r), bs(len), 28]} />
-      <meshStandardMaterial color={color} metalness={0.7} roughness={roughness} />
-    </mesh>
-  );
-}
-
-function BenchBlock({
-  u,
-  len,
-  h,
-  w,
-  y0,
-  color,
-}: {
-  u: number;
-  len: number;
-  h: number;
-  w: number;
-  y0: number;
-  color: string;
-}) {
-  return (
-    <mesh position={[bx(u), bs(y0 + h / 2), 0]} castShadow receiveShadow>
-      <boxGeometry args={[bs(len), bs(h), bs(w)]} />
-      <meshStandardMaterial color={color} metalness={0.45} roughness={0.6} />
-    </mesh>
-  );
-}
-
-/** O conjunto motor-bomba completo, em escala de mundo. */
-function ProceduralBench({ spin }: { spin: boolean }) {
-  const shaft = useRef<THREE.Mesh>(null);
-  useFrame((_, delta) => {
-    if (spin && shaft.current) shaft.current.rotation.y += delta * 2.4;
-  });
-
-  return (
-    <group>
-      {/* skid + placa de base */}
-      <BenchBlock u={600} len={BENCH.skid.len} h={BENCH.skid.h} w={BENCH.skid.w} y0={0} color="#3f4855" />
-      <BenchBlock
-        u={600}
-        len={BENCH.plate.len}
-        h={BENCH.plate.h}
-        w={BENCH.plate.w}
-        y0={BENCH.plate.y0}
-        color="#4b5563"
-      />
-
-      {/* bomba */}
-      <BenchBlock
-        u={BENCH.pumpBody.u}
-        len={BENCH.pumpBody.len}
-        h={BENCH.pumpBody.h}
-        w={BENCH.pumpBody.w}
-        y0={BENCH.pumpBody.y0}
-        color="#2d3748"
-      />
-      <BenchTube u={BENCH.pumpVolute.u} r={BENCH.pumpVolute.r} len={BENCH.pumpVolute.len} color="#6b7280" />
-      <BenchTube u={BENCH.pumpInlet.u} r={BENCH.pumpInlet.r} len={BENCH.pumpInlet.len} color="#8a94a3" />
-
-      {/* suporte vertical + placa de instrumentacao */}
-      <BenchBlock
-        u={BENCH.stand.u}
-        len={BENCH.stand.s}
-        h={BENCH.stand.h}
-        w={BENCH.stand.s}
-        y0={BENCH.stand.y0}
-        color="#8a94a3"
-      />
-      <BenchBlock
-        u={BENCH.topPlate.u}
-        len={BENCH.topPlate.s}
-        h={BENCH.topPlate.h}
-        w={BENCH.topPlate.s}
-        y0={BENCH.topPlate.y0}
-        color="#2d3748"
-      />
-
-      {/* acoplamento, eixo e os DOIS MANCAIS */}
-      <BenchTube u={BENCH.coupling.u} r={BENCH.coupling.r} len={BENCH.coupling.len} color="#9aa4b2" />
-      <group position={[bx(BENCH.shaft.u), bs(BENCH_CL), 0]} rotation={[0, 0, Math.PI / 2]}>
-        <mesh ref={shaft} castShadow>
-          <cylinderGeometry args={[bs(BENCH.shaft.r), bs(BENCH.shaft.r), bs(BENCH.shaft.len), 20]} />
-          <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.2} />
-        </mesh>
+    <Suspense fallback={null}>
+      <group scale={BENCH_SCALE}>
+        <BenchModel />
       </group>
-      <BenchTube u={BEARING_A_U} r={BENCH.bearing.r} len={BENCH.bearing.len} color="#1f2937" roughness={0.5} />
-      <BenchTube u={BEARING_B_U} r={BENCH.bearing.r} len={BENCH.bearing.len} color="#1f2937" roughness={0.5} />
-
-      {/* motor (azul, como o real) */}
-      <BenchTube u={BENCH.motorCapFU} r={BENCH.motorCap.r} len={BENCH.motorCap.len} color="#28598f" />
-      <BenchTube u={BENCH.motor.u} r={BENCH.motor.r} len={BENCH.motor.len} color="#2f6fb3" roughness={0.5} />
-      <BenchTube u={BENCH.motorCapRU} r={BENCH.motorCap.r} len={BENCH.motorCap.len} color="#28598f" />
-      <BenchBlock
-        u={BENCH.motorFeet.u}
-        len={BENCH.motorFeet.len}
-        h={BENCH.motorFeet.h}
-        w={BENCH.motorFeet.w}
-        y0={BENCH.motorFeet.y0}
-        color="#2d3748"
-      />
-    </group>
+    </Suspense>
   );
 }
 
@@ -407,7 +294,7 @@ function BenchMachine({
         />
       </mesh>
 
-      <ProceduralBench spin={worst !== "unknown"} />
+      <BenchMesh />
 
       {/* um sensor clicavel sobre cada mancal */}
       {DEFAULT_BENCH_POINTS.map((point) => {

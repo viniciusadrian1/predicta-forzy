@@ -5,136 +5,54 @@
  * =================
  * Gêmeo 3D da BANCADA DE BOMBA DE TESTE real da Forzy — não um motor genérico.
  *
- * Geometria reconstruída a partir do CAD entregue pela Forzy
- * (`ChallengeForzy-bomba-teste.stp`, AVEVA / AP203, unidades em mm).
- * O STEP é uma representação simplificada (17 sólidos, 63 faces em B-spline),
- * então reconstruímos por primitivas usando as MEDIDAS REAIS extraídas dele —
- * fica mais leve e mais legível que tesselar o B-rep.
+ * A malha é o CAD DELES: `ChallengeForzy-bomba-teste.stp` (AVEVA / AP203)
+ * tesselado com OpenCascade e exportado como `/models/bomba-teste.glb`
+ * (17 sólidos, ~12k triângulos), já em metros e no referencial do three.js.
  *
- * Conjunto real: 1200 (comprimento) × 500 (largura) × 817 (altura) mm,
- * linha de centro do eixo a 550 mm do piso do skid.
- *
- * PONTO-CHAVE DO MODELO DE DADOS: MTR-F01 e MTR-F02 NÃO são dois motores —
- * são os DOIS MANCAIS (⌀89,6 × 19,2 mm, as únicas duas peças idênticas do
- * conjunto) que flanqueiam o eixo central. Um equipamento, dois pontos de
- * medição. É isso que este visualizador comunica.
+ * MTR-F01 e MTR-F02 NÃO são dois motores: são os DOIS MANCAIS (⌀58 × 19 mm,
+ * as únicas duas peças idênticas do conjunto) que flanqueiam o eixo central.
+ * Um equipamento, dois pontos de medição — é isso que este visualizador mostra.
  */
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
-import * as THREE from "three";
+import { Suspense, useCallback, useState } from "react";
 
+import { BenchModel } from "@/components/BenchModel";
 import { getAssets, getLatest } from "@/lib/api";
 import {
-  BEARING_A_U,
-  BEARING_B_U,
   BENCH,
-  BENCH_STATUS_COLOR,
+  BENCH_STATUS_COLOR as STATUS_COLOR,
   CENTERLINE,
   DEFAULT_BENCH_POINTS,
   axPos as ax,
+  bearingU,
   mm,
   type BenchPoint,
 } from "@/lib/benchGeometry";
 
-// --------------------------------------------------------------------------
-// Medidas reais do CAD Forzy — fonte única em `@/lib/benchGeometry`.
-// Aliases locais para manter a leitura da cena curta.
-// --------------------------------------------------------------------------
-const SKID = BENCH.skid;
-const PLATE = { ...BENCH.plate, y: BENCH.plate.y0 };
-const PUMP_VOLUTE = BENCH.pumpVolute;
-const PUMP_BODY = BENCH.pumpBody;
-const PUMP_INLET = BENCH.pumpInlet;
-const COUPLING = BENCH.coupling;
-const SHAFT = BENCH.shaft;
-const BEARING = BENCH.bearing;
-const MOTOR = BENCH.motor;
-const MOTOR_CAP = BENCH.motorCap;
-const MOTOR_CAP_F_U = BENCH.motorCapFU;
-const MOTOR_CAP_R_U = BENCH.motorCapRU;
-const MOTOR_FEET = BENCH.motorFeet;
-const STAND = BENCH.stand;
-const TOP_PLATE = BENCH.topPlate;
-const STATUS_COLOR = BENCH_STATUS_COLOR;
-
-const STEEL = "#8a94a3";
-const DARK = "#2d3748";
-const MOTOR_BLUE = "#2f6fb3"; // o motor real é azul
-const BEARING_C = "#1f2937";
-
 export { DEFAULT_BENCH_POINTS };
 export type { BenchPoint };
-
-// --------------------------------------------------------------------------
-// Primitivas (cilindro deitado ao longo de X)
-// --------------------------------------------------------------------------
-function Tube({
-  u,
-  r,
-  len,
-  y = CENTERLINE,
-  color,
-  metalness = 0.75,
-  roughness = 0.45,
-}: {
-  u: number;
-  r: number;
-  len: number;
-  y?: number;
-  color: string;
-  metalness?: number;
-  roughness?: number;
-}) {
-  return (
-    <mesh position={[ax(u), y, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
-      <cylinderGeometry args={[r, r, len, 40]} />
-      <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
-    </mesh>
-  );
-}
-
-function Block({
-  u,
-  len,
-  h,
-  w,
-  y0,
-  color,
-}: {
-  u: number;
-  len: number;
-  h: number;
-  w: number;
-  y0: number;
-  color: string;
-}) {
-  return (
-    <mesh position={[ax(u), y0 + h / 2, 0]} castShadow receiveShadow>
-      <boxGeometry args={[len, h, w]} />
-      <meshStandardMaterial color={color} metalness={0.5} roughness={0.6} />
-    </mesh>
-  );
-}
 
 // --------------------------------------------------------------------------
 // Marcador de sensor sobre um mancal
 // --------------------------------------------------------------------------
 function BearingSensor({
   point,
-  u,
   status,
   isActive,
+  isFocused,
   isHovered,
   onClick,
   onHover,
 }: {
   point: BenchPoint;
-  u: number;
   status: string;
+  /** Selecionado por clique — abre o balao de leitura. */
   isActive: boolean;
+  /** Mancal do ativo aberto — apenas destaca, sem abrir o balao. */
+  isFocused: boolean;
   isHovered: boolean;
   onClick: () => void;
   onHover: (v: boolean) => void;
@@ -149,15 +67,15 @@ function BearingSensor({
     enabled: show,
   });
 
-  // O sensor fica no TOPO do mancal (como na bancada real).
-  const yTop = CENTERLINE + BEARING.r + mm(30);
+  // O sensor fica no topo do mancal, como na bancada real.
+  const yTop = CENTERLINE + BENCH.bearing.r + mm(22);
 
   return (
-    <group position={[ax(u), yTop, 0]}>
-      {/* Haste do sensor até o mancal */}
-      <mesh position={[0, -mm(22), 0]}>
-        <cylinderGeometry args={[mm(4), mm(4), mm(44), 10]} />
-        <meshStandardMaterial color={color} transparent opacity={0.7} />
+    <group position={[ax(bearingU(point)), yTop, 0]}>
+      {/* Haste até o mancal */}
+      <mesh position={[0, -mm(16), 0]}>
+        <cylinderGeometry args={[mm(3), mm(3), mm(32), 10]} />
+        <meshStandardMaterial color={color} transparent opacity={0.75} />
       </mesh>
 
       {/* Corpo do sensor (clicável) */}
@@ -171,21 +89,21 @@ function BearingSensor({
           onHover(true);
         }}
         onPointerOut={() => onHover(false)}
-        scale={isActive ? 1.35 : isHovered ? 1.15 : 1}
+        scale={isActive || isFocused ? 1.35 : isHovered ? 1.15 : 1}
         castShadow
       >
-        <sphereGeometry args={[mm(26), 20, 20]} />
+        <sphereGeometry args={[mm(20), 20, 20]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isActive ? 0.85 : 0.35}
+          emissiveIntensity={isActive || isFocused ? 0.85 : 0.35}
           roughness={0.25}
           metalness={0.3}
         />
       </mesh>
 
       {show && (
-        <Html distanceFactor={1.6} position={[0, mm(75), 0]} center style={{ pointerEvents: "none" }}>
+        <Html distanceFactor={1.4} position={[0, mm(60), 0]} center style={{ pointerEvents: "none" }}>
           <div
             style={{
               background: "rgba(15,23,42,0.97)",
@@ -200,26 +118,19 @@ function BearingSensor({
               boxShadow: `0 4px 24px ${color}22`,
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2, color }}>
-              {point.label}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2, color }}>{point.label}</div>
             <div style={{ color: "#64748b", fontSize: 11, marginBottom: 8 }}>
               {point.tag} · sensor IO-Link
             </div>
             {latest.isLoading && <div style={{ color: "#475569" }}>Carregando…</div>}
             {latest.data?.readings.map((r) => {
-              const isTemp = r.variable === "Temperatura";
               const isVel = r.variable === "Vibracao_Velocidade_RMS";
               const isAcc = r.variable === "Vibracao_Aceleracao_RMS";
+              const isTemp = r.variable === "Temperatura";
               return (
                 <div
                   key={r.variable}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 14,
-                    padding: "2px 0",
-                  }}
+                  style={{ display: "flex", justifyContent: "space-between", gap: 14, padding: "2px 0" }}
                 >
                   <span style={{ color: "#94a3b8" }}>
                     {isVel
@@ -250,12 +161,14 @@ function BenchScene({
   points,
   statusOf,
   activeTag,
+  focusedTag,
   onSelect,
 }: {
   points: BenchPoint[];
   statusOf: (tag: string) => string;
   activeTag: string | null;
-  onSelect: (tag: string) => void;
+  focusedTag: string | null;
+  onSelect: (tag: string | null) => void;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const { gl } = useThree();
@@ -267,84 +180,36 @@ function BenchScene({
     [gl],
   );
 
-  // Leve rotação do eixo para dar vida (máquina girando). O cilindro tem eixo
-  // local Y, então o grupo pai o deita e giramos o mesh em torno do próprio Y.
-  const shaftRef = useRef<THREE.Mesh>(null);
-  useFrame(() => {
-    if (shaftRef.current) shaftRef.current.rotation.y += 0.02;
-  });
-
-  const uOf = (p: BenchPoint) => (p.side === "bomba" ? BEARING_A_U : BEARING_B_U);
-
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0.35, 0.95, 1.55]} fov={45} />
+      <PerspectiveCamera makeDefault position={[0.6, 1.0, 1.7]} fov={42} />
       <OrbitControls
         enablePan={false}
-        target={[0, CENTERLINE * 0.85, 0]}
-        minDistance={0.9}
-        maxDistance={3.2}
+        target={[0, CENTERLINE * 0.8, 0]}
+        minDistance={0.8}
+        maxDistance={3}
         maxPolarAngle={Math.PI * 0.5}
       />
 
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[1.5, 2.5, 1.5]} intensity={1.25} castShadow />
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[1.5, 2.5, 1.5]} intensity={1.2} castShadow />
       <directionalLight position={[-1.5, 1.2, -1]} intensity={0.35} color="#93c5fd" />
 
-      {/* --- Skid / base --- */}
-      <Block u={600} len={SKID.len} h={SKID.h} w={SKID.w} y0={0} color="#3f4855" />
-      <Block u={600} len={PLATE.len} h={PLATE.h} w={PLATE.w} y0={PLATE.y} color="#4b5563" />
+      {/* Malha do CAD real */}
+      <Suspense fallback={null}>
+        <BenchModel />
+      </Suspense>
 
-      {/* --- Bomba --- */}
-      <Block
-        u={PUMP_BODY.u}
-        len={PUMP_BODY.len}
-        h={PUMP_BODY.h}
-        w={PUMP_BODY.w}
-        y0={PUMP_BODY.y0}
-        color={DARK}
-      />
-      <Tube u={PUMP_VOLUTE.u} r={PUMP_VOLUTE.r} len={PUMP_VOLUTE.len} color="#6b7280" />
-      <Tube u={PUMP_INLET.u} r={PUMP_INLET.r} len={PUMP_INLET.len} color={STEEL} />
-
-      {/* Suporte vertical + placa superior (instrumentação) */}
-      <Block u={STAND.u} len={STAND.s} h={STAND.h} w={STAND.s} y0={STAND.y0} color={STEEL} />
-      <Block u={TOP_PLATE.u} len={TOP_PLATE.s} h={TOP_PLATE.h} w={TOP_PLATE.s} y0={TOP_PLATE.y0} color={DARK} />
-
-      {/* --- Acoplamento / eixo / mancais --- */}
-      <Tube u={COUPLING.u} r={COUPLING.r} len={COUPLING.len} color="#9aa4b2" roughness={0.35} />
-      <group position={[ax(SHAFT.u), CENTERLINE, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <mesh ref={shaftRef} castShadow>
-          <cylinderGeometry args={[SHAFT.r, SHAFT.r, SHAFT.len, 24]} />
-          <meshStandardMaterial color="#cbd5e1" metalness={0.95} roughness={0.2} />
-        </mesh>
-      </group>
-      <Tube u={BEARING_A_U} r={BEARING.r} len={BEARING.len} color={BEARING_C} roughness={0.5} />
-      <Tube u={BEARING_B_U} r={BEARING.r} len={BEARING.len} color={BEARING_C} roughness={0.5} />
-
-      {/* --- Motor (azul, como o real) --- */}
-      <Tube u={MOTOR_CAP_F_U} r={MOTOR_CAP.r} len={MOTOR_CAP.len} color="#28598f" />
-      <Tube u={MOTOR.u} r={MOTOR.r} len={MOTOR.len} color={MOTOR_BLUE} roughness={0.5} />
-      <Tube u={MOTOR_CAP_R_U} r={MOTOR_CAP.r} len={MOTOR_CAP.len} color="#28598f" />
-      <Block
-        u={MOTOR_FEET.u}
-        len={MOTOR_FEET.len}
-        h={MOTOR_FEET.h}
-        w={MOTOR_FEET.w}
-        y0={MOTOR_FEET.y0}
-        color={DARK}
-      />
-
-      {/* --- Sensores nos dois mancais --- */}
+      {/* Sensores nos dois mancais */}
       {points.map((p) => (
         <BearingSensor
           key={p.tag}
           point={p}
-          u={uOf(p)}
           status={statusOf(p.tag)}
           isActive={activeTag === p.tag}
+          isFocused={focusedTag === p.tag}
           isHovered={hovered === p.tag}
-          onClick={() => onSelect(p.tag)}
+          onClick={() => onSelect(activeTag === p.tag ? null : p.tag)}
           onHover={(v) => hover(p.tag, v)}
         />
       ))}
@@ -369,9 +234,10 @@ export interface PumpBenchViewer3DProps {
 }
 
 export function PumpBenchViewer3D({ activeTag, points = DEFAULT_BENCH_POINTS }: PumpBenchViewer3DProps) {
-  const [selected, setSelected] = useState<string | null>(activeTag ?? null);
+  // O mancal do ativo aberto fica destacado, mas o balao so abre no
+  // hover/clique — senao ele tapa o modelo assim que a pagina carrega.
+  const [selected, setSelected] = useState<string | null>(null);
 
-  // Status de cada mancal vem do próprio ativo correspondente.
   const assetsQuery = useQuery({
     queryKey: ["assets"],
     queryFn: () => getAssets(),
@@ -394,15 +260,14 @@ export function PumpBenchViewer3D({ activeTag, points = DEFAULT_BENCH_POINTS }: 
             points={points}
             statusOf={statusOf}
             activeTag={selected}
-            onSelect={(t) => setSelected((cur) => (cur === t ? null : t))}
+            focusedTag={activeTag ?? null}
+            onSelect={setSelected}
           />
         </Canvas>
 
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-slate-900/85 px-2.5 py-1.5">
           <p className="text-[11px] font-semibold text-slate-200">Bancada de bomba de teste</p>
-          <p className="text-[10px] text-slate-500">
-            Geometria do CAD Forzy · 1200 × 500 × 817 mm
-          </p>
+          <p className="text-[10px] text-slate-500">Malha do CAD da Forzy · 1200 × 500 × 817 mm</p>
         </div>
 
         <div className="pointer-events-none absolute bottom-3 left-0 right-0 flex justify-center">

@@ -72,3 +72,8 @@ desktop.ini
 .cache/
 tmp/
 *.pid
+
+# CAD fonte da Forzy (material do cliente) - so o GLB derivado e versionado
+*.stp
+*.step
+*.dwg
