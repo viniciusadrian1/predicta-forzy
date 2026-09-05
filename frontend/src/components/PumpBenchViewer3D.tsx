@@ -27,58 +27,46 @@ import { useCallback, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { getAssets, getLatest } from "@/lib/api";
+import {
+  BEARING_A_U,
+  BEARING_B_U,
+  BENCH,
+  BENCH_STATUS_COLOR,
+  CENTERLINE,
+  DEFAULT_BENCH_POINTS,
+  axPos as ax,
+  mm,
+  type BenchPoint,
+} from "@/lib/benchGeometry";
 
 // --------------------------------------------------------------------------
-// Medidas reais do CAD (mm -> m). `u` = posição ao longo do eixo da máquina,
-// medida a partir da extremidade da bomba (0..1200 mm). x = (u - 600) / 1000.
+// Medidas reais do CAD Forzy — fonte única em `@/lib/benchGeometry`.
+// Aliases locais para manter a leitura da cena curta.
 // --------------------------------------------------------------------------
-const mm = (v: number) => v / 1000;
-const ax = (u: number) => (u - 600) / 1000; // posição no eixo -> x (metros)
-
-const CENTERLINE = mm(550); // altura da linha de centro do eixo
-const SKID = { len: mm(1200), h: mm(210), w: mm(500) };
-const PLATE = { len: mm(1071), h: mm(85.9), w: mm(381), y: mm(210) };
-
-const PUMP_VOLUTE = { r: mm(459.1 / 2), len: mm(57.6), u: 214.5 };
-const PUMP_BODY = { len: mm(57.6), h: mm(340), w: mm(295.1), u: 214.5, y0: mm(210) };
-const PUMP_INLET = { r: mm(197.6 / 2), len: mm(18), u: 119.5 };
-const COUPLING = { r: mm(134.4 / 2), len: mm(200), u: 343.3 };
-const SHAFT = { r: mm(29.9 / 2), len: mm(210.6), u: 548.6 };
-/** Os dois mancais — únicas peças idênticas do conjunto. */
-const BEARING = { r: mm(89.6 / 2), len: mm(19.2) };
-const BEARING_A_U = 500.9; // lado bomba
-const BEARING_B_U = 596.3; // lado motor
-const MOTOR = { r: mm(412.1 / 2), len: mm(300), u: 872.8 };
-const MOTOR_CAP = { r: mm(412.1 / 2), len: mm(68.9) };
-const MOTOR_CAP_F_U = 688.3;
-const MOTOR_CAP_R_U = 1057.2;
-const MOTOR_FEET = { len: mm(300), h: mm(340), w: mm(264.9), u: 872.8, y0: mm(210) };
-const STAND = { s: mm(52.9), h: mm(267), u: 214.5, y0: mm(536) };
-const TOP_PLATE = { s: mm(168), h: mm(14), u: 214.5, y0: mm(803) };
-
-const STATUS_COLOR: Record<string, string> = {
-  ok: "#22c55e",
-  warning: "#f59e0b",
-  critical: "#ef4444",
-  unknown: "#64748b",
-};
+const SKID = BENCH.skid;
+const PLATE = { ...BENCH.plate, y: BENCH.plate.y0 };
+const PUMP_VOLUTE = BENCH.pumpVolute;
+const PUMP_BODY = BENCH.pumpBody;
+const PUMP_INLET = BENCH.pumpInlet;
+const COUPLING = BENCH.coupling;
+const SHAFT = BENCH.shaft;
+const BEARING = BENCH.bearing;
+const MOTOR = BENCH.motor;
+const MOTOR_CAP = BENCH.motorCap;
+const MOTOR_CAP_F_U = BENCH.motorCapFU;
+const MOTOR_CAP_R_U = BENCH.motorCapRU;
+const MOTOR_FEET = BENCH.motorFeet;
+const STAND = BENCH.stand;
+const TOP_PLATE = BENCH.topPlate;
+const STATUS_COLOR = BENCH_STATUS_COLOR;
 
 const STEEL = "#8a94a3";
 const DARK = "#2d3748";
 const MOTOR_BLUE = "#2f6fb3"; // o motor real é azul
 const BEARING_C = "#1f2937";
 
-/** Ponto de medição (mancal) mapeado a uma TAG de telemetria. */
-export interface BenchPoint {
-  tag: string;
-  label: string;
-  side: "bomba" | "motor";
-}
-
-export const DEFAULT_BENCH_POINTS: BenchPoint[] = [
-  { tag: "MTR-F01", label: "Mancal lado bomba", side: "bomba" },
-  { tag: "MTR-F02", label: "Mancal lado motor", side: "motor" },
-];
+export { DEFAULT_BENCH_POINTS };
+export type { BenchPoint };
 
 // --------------------------------------------------------------------------
 // Primitivas (cilindro deitado ao longo de X)

@@ -13,6 +13,15 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
+import {
+  BEARING_A_U,
+  BEARING_B_U,
+  BENCH,
+  BENCH_TAGS,
+  axPos,
+  bearingU,
+  DEFAULT_BENCH_POINTS,
+} from "@/lib/benchGeometry";
 import type { Asset } from "@/types";
 
 // -- dados de apoio ---------------------------------------------------------
@@ -226,16 +235,262 @@ function Machine({ asset, hero, useGlb, selected, anySelected, onSelect }: Machi
   );
 }
 
+
+// -- bancada de bomba de teste (equipamento real da Forzy) ------------------
+// MTR-F01 e MTR-F02 nao sao dois motores: sao os dois MANCAIS deste conjunto.
+// Geometria nas medidas reais do CAD (@/lib/benchGeometry), escalada para o
+// mundo isometrico.
+
+/** Unidades de mundo por metro real. */
+const BENCH_SCALE = 3.0;
+/** Linha de centro do eixo (m). */
+const BENCH_CL = 0.55;
+const bx = (u: number) => axPos(u) * BENCH_SCALE;
+const bs = (m: number) => m * BENCH_SCALE;
+
+function BenchTube({
+  u,
+  r,
+  len,
+  color,
+  y = BENCH_CL,
+  roughness = 0.45,
+}: {
+  u: number;
+  r: number;
+  len: number;
+  color: string;
+  y?: number;
+  roughness?: number;
+}) {
+  return (
+    <mesh position={[bx(u), bs(y), 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+      <cylinderGeometry args={[bs(r), bs(r), bs(len), 28]} />
+      <meshStandardMaterial color={color} metalness={0.7} roughness={roughness} />
+    </mesh>
+  );
+}
+
+function BenchBlock({
+  u,
+  len,
+  h,
+  w,
+  y0,
+  color,
+}: {
+  u: number;
+  len: number;
+  h: number;
+  w: number;
+  y0: number;
+  color: string;
+}) {
+  return (
+    <mesh position={[bx(u), bs(y0 + h / 2), 0]} castShadow receiveShadow>
+      <boxGeometry args={[bs(len), bs(h), bs(w)]} />
+      <meshStandardMaterial color={color} metalness={0.45} roughness={0.6} />
+    </mesh>
+  );
+}
+
+/** O conjunto motor-bomba completo, em escala de mundo. */
+function ProceduralBench({ spin }: { spin: boolean }) {
+  const shaft = useRef<THREE.Mesh>(null);
+  useFrame((_, delta) => {
+    if (spin && shaft.current) shaft.current.rotation.y += delta * 2.4;
+  });
+
+  return (
+    <group>
+      {/* skid + placa de base */}
+      <BenchBlock u={600} len={BENCH.skid.len} h={BENCH.skid.h} w={BENCH.skid.w} y0={0} color="#3f4855" />
+      <BenchBlock
+        u={600}
+        len={BENCH.plate.len}
+        h={BENCH.plate.h}
+        w={BENCH.plate.w}
+        y0={BENCH.plate.y0}
+        color="#4b5563"
+      />
+
+      {/* bomba */}
+      <BenchBlock
+        u={BENCH.pumpBody.u}
+        len={BENCH.pumpBody.len}
+        h={BENCH.pumpBody.h}
+        w={BENCH.pumpBody.w}
+        y0={BENCH.pumpBody.y0}
+        color="#2d3748"
+      />
+      <BenchTube u={BENCH.pumpVolute.u} r={BENCH.pumpVolute.r} len={BENCH.pumpVolute.len} color="#6b7280" />
+      <BenchTube u={BENCH.pumpInlet.u} r={BENCH.pumpInlet.r} len={BENCH.pumpInlet.len} color="#8a94a3" />
+
+      {/* suporte vertical + placa de instrumentacao */}
+      <BenchBlock
+        u={BENCH.stand.u}
+        len={BENCH.stand.s}
+        h={BENCH.stand.h}
+        w={BENCH.stand.s}
+        y0={BENCH.stand.y0}
+        color="#8a94a3"
+      />
+      <BenchBlock
+        u={BENCH.topPlate.u}
+        len={BENCH.topPlate.s}
+        h={BENCH.topPlate.h}
+        w={BENCH.topPlate.s}
+        y0={BENCH.topPlate.y0}
+        color="#2d3748"
+      />
+
+      {/* acoplamento, eixo e os DOIS MANCAIS */}
+      <BenchTube u={BENCH.coupling.u} r={BENCH.coupling.r} len={BENCH.coupling.len} color="#9aa4b2" />
+      <group position={[bx(BENCH.shaft.u), bs(BENCH_CL), 0]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh ref={shaft} castShadow>
+          <cylinderGeometry args={[bs(BENCH.shaft.r), bs(BENCH.shaft.r), bs(BENCH.shaft.len), 20]} />
+          <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.2} />
+        </mesh>
+      </group>
+      <BenchTube u={BEARING_A_U} r={BENCH.bearing.r} len={BENCH.bearing.len} color="#1f2937" roughness={0.5} />
+      <BenchTube u={BEARING_B_U} r={BENCH.bearing.r} len={BENCH.bearing.len} color="#1f2937" roughness={0.5} />
+
+      {/* motor (azul, como o real) */}
+      <BenchTube u={BENCH.motorCapFU} r={BENCH.motorCap.r} len={BENCH.motorCap.len} color="#28598f" />
+      <BenchTube u={BENCH.motor.u} r={BENCH.motor.r} len={BENCH.motor.len} color="#2f6fb3" roughness={0.5} />
+      <BenchTube u={BENCH.motorCapRU} r={BENCH.motorCap.r} len={BENCH.motorCap.len} color="#28598f" />
+      <BenchBlock
+        u={BENCH.motorFeet.u}
+        len={BENCH.motorFeet.len}
+        h={BENCH.motorFeet.h}
+        w={BENCH.motorFeet.w}
+        y0={BENCH.motorFeet.y0}
+        color="#2d3748"
+      />
+    </group>
+  );
+}
+
+/** A bancada no chao da planta, com um sensor clicavel sobre cada mancal. */
+function BenchMachine({
+  assets,
+  selectedTag,
+  anySelected,
+  onSelect,
+}: {
+  assets: Asset[];
+  selectedTag: string | null;
+  anySelected: boolean;
+  onSelect: (tag: string) => void;
+}) {
+  // Posicao do conjunto = media das coordenadas dos dois mancais.
+  const px = assets.reduce((acc, a) => acc + (a.position_x ?? 0.5), 0) / assets.length;
+  const py = assets.reduce((acc, a) => acc + (a.position_y ?? 0.5), 0) / assets.length;
+  const [x, z] = toFloor(px, py);
+
+  // Anel do conjunto = pior status entre os mancais.
+  const rank = (st: string) => (st === "critical" ? 3 : st === "warning" ? 2 : st === "ok" ? 1 : 0);
+  const worst = assets.reduce((w, a) => (rank(a.status) > rank(w) ? a.status : w), "unknown");
+  const ringColor = statusColor(worst);
+  const benchSelected = assets.some((a) => a.tag === selectedTag);
+  const dimmed = anySelected && !benchSelected;
+
+  return (
+    <group position={[x, 0, z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[2.4, 2.75, 56]} />
+        <meshBasicMaterial
+          color={ringColor}
+          transparent
+          opacity={benchSelected ? 0.95 : dimmed ? 0.3 : 0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      <ProceduralBench spin={worst !== "unknown"} />
+
+      {/* um sensor clicavel sobre cada mancal */}
+      {DEFAULT_BENCH_POINTS.map((point) => {
+        const asset = assets.find((a) => a.tag === point.tag);
+        if (!asset) return null;
+        const color = statusColor(asset.status);
+        const isSel = selectedTag === point.tag;
+        const yTop = bs(BENCH_CL + BENCH.bearing.r + 0.05);
+        return (
+          <group key={point.tag} position={[bx(bearingU(point)), yTop, 0]}>
+            <mesh
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(point.tag);
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                document.body.style.cursor = "pointer";
+              }}
+              onPointerOut={() => (document.body.style.cursor = "auto")}
+              scale={isSel ? 1.5 : 1}
+              castShadow
+            >
+              <sphereGeometry args={[0.16, 16, 16]} />
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={isSel ? 0.9 : 0.4}
+                roughness={0.25}
+              />
+            </mesh>
+            {!isSel && (
+              // Os mancais distam so ~95 mm no real: separa os badges em X e Y
+              // para nao se sobreporem na planta.
+              <Html
+                position={point.side === "bomba" ? [-0.75, 0.45, 0] : [0.75, 1.15, 0]}
+                center
+                zIndexRange={[20, 0]}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(point.tag);
+                  }}
+                  className="flex items-center gap-1.5 whitespace-nowrap rounded-full border bg-slate-900/85 px-2 py-0.5 text-[10px] font-medium text-slate-100 shadow-md backdrop-blur transition"
+                  style={{ borderColor: color, opacity: dimmed ? 0.35 : 1 }}
+                >
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="font-semibold">{point.tag}</span>
+                </button>
+              </Html>
+            )}
+          </group>
+        );
+      })}
+
+      {/* rotulo do conjunto */}
+      <Html position={[0, bs(1.35), 0]} center zIndexRange={[20, 0]}>
+        <div
+          className="whitespace-nowrap rounded-full border border-slate-700 bg-slate-900/85 px-2.5 py-1 text-[11px] font-semibold text-slate-100 shadow-md backdrop-blur"
+          style={{ opacity: dimmed ? 0.4 : 1 }}
+        >
+          Bancada de bomba de teste
+          <span className="ml-1.5 font-normal text-slate-400">· 2 mancais</span>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
 // -- cena -------------------------------------------------------------------
 
 function Scene({
   assets,
+  benchAssets,
   heroTag,
   useGlb,
   selectedTag,
   onSelect,
 }: {
   assets: Asset[];
+  benchAssets: Asset[];
   heroTag: string | null;
   useGlb: boolean;
   selectedTag: string | null;
@@ -267,6 +522,15 @@ function Scene({
         position={[0, 0.01, 0]}
       />
       <ContactShadows position={[0, 0.02, 0]} scale={WORLD_W + 8} blur={2.2} opacity={0.5} far={12} />
+
+      {benchAssets.length > 0 && (
+        <BenchMachine
+          assets={benchAssets}
+          selectedTag={selectedTag}
+          anySelected={selectedTag !== null}
+          onSelect={onSelect}
+        />
+      )}
 
       {assets.map((asset) => (
         <Machine
@@ -363,12 +627,17 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
     () => assets.filter((a) => a.position_x !== null && a.position_y !== null),
     [assets],
   );
+  // A bancada (MTR-F01/F02) e UM equipamento com dois mancais: renderizada uma
+  // unica vez, fora do laco das demais maquinas.
+  const benchAssets = useMemo(() => placed.filter((a) => BENCH_TAGS.includes(a.tag)), [placed]);
+  const otherAssets = useMemo(() => placed.filter((a) => !BENCH_TAGS.includes(a.tag)), [placed]);
+
   const heroTag = useMemo(() => {
-    const motors = placed.filter((a) => a.asset_type === "motor");
-    const pool = motors.length ? motors : placed;
+    const motors = otherAssets.filter((a) => a.asset_type === "motor");
+    const pool = motors.length ? motors : otherAssets;
     if (!pool.length) return null;
     return pool.reduce((best, a) => ((a.power_kw ?? 0) > (best.power_kw ?? 0) ? a : best)).tag;
-  }, [placed]);
+  }, [otherAssets]);
 
   // Detecta o .glb sem quebrar a cena quando ausente (HEAD honesto).
   useEffect(() => {
@@ -391,7 +660,8 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
         camera={{ position: [0, 18, 25], fov: 32 }}
       >
         <Scene
-          assets={placed}
+          assets={otherAssets}
+          benchAssets={benchAssets}
           heroTag={heroTag}
           useGlb={glbOk}
           selectedTag={selectedTag}
