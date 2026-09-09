@@ -65,19 +65,37 @@ function fmt(value: string | null): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("pt-BR");
 }
 
+const ORIGIN_LABEL: Record<string, string> = {
+  importacao: "Importação de base existente",
+  ocr: "Leitura de placa por OCR",
+  ia: "Extração por IA",
+  manual: "Cadastro manual",
+};
+
 /** Metadados de rastreabilidade exigidos pela governanca (cadastro do ativo). */
 export function TraceabilityCard({ asset }: { asset: Asset }) {
+  // Os campos de OCR so existem quando o ativo NASCEU de uma foto de placa.
+  // Num ativo importado nunca houve extracao, entao "—" seria lido como dado
+  // faltando; o correto e dizer que a etapa nao aconteceu. Score de confianca
+  // aqui e a cobertura do OCR na placa - nao tem relacao com o score do
+  // Isolation Forest em "Saude do ativo", que mede a vibracao de agora.
+  const fromOcr = asset.data_origin === "ocr" || asset.data_origin === "ia";
+  const semOcr = fromOcr ? "—" : "Não se aplica (sem leitura de placa)";
+
   const rows: Array<[string, string]> = [
-    ["Origem do dado", asset.data_origin],
-    ["Data da foto/cadastro", fmt(asset.registration_photo_at)],
-    ["Versão do OCR", asset.ocr_engine_version ?? "—"],
+    ["Origem do dado", ORIGIN_LABEL[asset.data_origin] ?? asset.data_origin],
     [
-      "Score de confiança",
-      asset.ocr_confidence != null ? `${Math.round(asset.ocr_confidence * 100)}%` : "—",
+      "Data da foto/cadastro",
+      asset.registration_photo_at ? fmt(asset.registration_photo_at) : semOcr,
+    ],
+    ["Versão do OCR", asset.ocr_engine_version ?? semOcr],
+    [
+      "Score de confiança do OCR",
+      asset.ocr_confidence != null ? `${Math.round(asset.ocr_confidence * 100)}%` : semOcr,
     ],
     ["Responsável pela validação", asset.validated_by ?? "Pendente"],
-    ["Fonte da imagem", asset.image_source ?? "—"],
-    ["Condição visual", asset.visual_condition ?? "—"],
+    ["Fonte da imagem", asset.image_source ?? semOcr],
+    ["Condição visual", asset.visual_condition ?? "Não avaliada"],
   ];
   return (
     <Card>
@@ -90,7 +108,15 @@ export function TraceabilityCard({ asset }: { asset: Asset }) {
           {rows.map(([label, value]) => (
             <div key={label} className="flex justify-between gap-4">
               <dt className="text-slate-400">{label}</dt>
-              <dd className="text-right text-slate-200">{value}</dd>
+              <dd
+                className={
+                  value.startsWith("Não") || value === "Pendente" || value === "—"
+                    ? "text-right text-slate-500"
+                    : "text-right text-slate-200"
+                }
+              >
+                {value}
+              </dd>
             </div>
           ))}
         </dl>

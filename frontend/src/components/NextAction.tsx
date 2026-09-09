@@ -10,11 +10,14 @@ import {
   CheckCircle2,
   CircleAlert,
   HelpCircle,
+  MessageCircleQuestion,
   OctagonAlert,
 } from "lucide-react";
 import Link from "next/link";
 
 import { getAlerts, getLatest, getRul } from "@/lib/api";
+import { rulDeadlineLabel } from "@/lib/rul";
+import { useVolt } from "@/lib/volt";
 import { cn } from "@/lib/utils";
 
 // Espelho dos limiares do backend (alerts/evaluator.py).
@@ -91,7 +94,7 @@ function buildRecommendation(
   if (rulDays !== null && rulDays < RUL_CRITICAL_DAYS) {
     return {
       tone: "critical",
-      title: `Vida útil estimada em ${fmt(rulDays, 0)} dias`,
+      title: `Vida útil estimada em ${rulDeadlineLabel(rulDays)}`,
       action:
         "Priorizar a troca do rolamento na próxima janela de manutenção — a tendência de vibração se aproxima do limite ISO.",
     };
@@ -115,7 +118,7 @@ function buildRecommendation(
   if (rulDays !== null && rulDays < RUL_WARNING_DAYS) {
     return {
       tone: "warning",
-      title: `Vida útil estimada em ${fmt(rulDays, 0)} dias`,
+      title: `Vida útil estimada em ${rulDeadlineLabel(rulDays)}`,
       action:
         "Planejar a substituição do rolamento na próxima parada programada e garantir peça em estoque.",
     };
@@ -152,6 +155,7 @@ export function NextAction({ tag }: { tag: string }) {
     queryFn: () => getRul(tag),
     refetchInterval: 30000,
   });
+  const openVolt = useVolt((state) => state.openFor);
 
   if (latestQuery.isPending) return null;
 
@@ -192,9 +196,14 @@ export function NextAction({ tag }: { tag: string }) {
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             )}
-            <span className="text-slate-600">
-              Dúvidas? Pergunte ao assistente pelo botão flutuante.
-            </span>
+            <button
+              type="button"
+              onClick={() => openVolt(tag)}
+              className="inline-flex items-center gap-1 font-medium text-cyan-400 hover:text-cyan-300"
+            >
+              <MessageCircleQuestion className="h-3.5 w-3.5" />
+              Tirar dúvida sobre este ativo com o Volt
+            </button>
           </div>
         </div>
       </div>

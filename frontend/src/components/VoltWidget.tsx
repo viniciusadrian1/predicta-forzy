@@ -5,16 +5,25 @@
 
 import { Wrench, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { VoltChat } from "@/components/VoltChat";
+import { useVolt } from "@/lib/volt";
 
 export function VoltWidget() {
-  const [open, setOpen] = useState(false);
+  // A abertura vive num store para que a pagina tambem possa abrir o
+  // assistente (ex.: "Perguntar ao assistente" no card de proxima acao).
+  const open = useVolt((state) => state.open);
+  const openFor = useVolt((state) => state.openFor);
+  const close = useVolt((state) => state.close);
   // Monta o chat na 1a abertura e nunca desmonta: preserva a conversa ao
   // fechar/reabrir (sem refazer a saudacao). Antes o `open &&` desmontava tudo.
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (open) setMounted(true);
+  }, [open]);
 
   // Na página cheia do Volt (ou no login) o widget nao faz sentido.
   if (pathname.startsWith("/volt") || pathname.startsWith("/login")) return null;
@@ -37,7 +46,7 @@ export function VoltWidget() {
             </div>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={close}
               aria-label="Fechar assistente"
               className="text-slate-400 hover:text-slate-200"
             >
@@ -56,12 +65,7 @@ export function VoltWidget() {
 
       <button
         type="button"
-        onClick={() =>
-          setOpen((value) => {
-            if (!value) setMounted(true);
-            return !value;
-          })
-        }
+        onClick={() => (open ? close() : openFor())}
         aria-label={open ? "Fechar o Volt" : "Abrir o Volt"}
         title="Falar com o Volt"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-lg transition-colors hover:bg-cyan-400"

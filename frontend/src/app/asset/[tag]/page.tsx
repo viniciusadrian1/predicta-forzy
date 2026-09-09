@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, getAsset, getAssets, validateAsset } from "@/lib/api";
-import { effectiveStatus, pointsOf } from "@/lib/assetGroup";
+import { pointsOf } from "@/lib/assetGroup";
+import { BENCH_SIZE } from "@/lib/benchGeometry";
 import { canValidate, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -137,20 +138,41 @@ export default function AssetPage({ params }: AssetPageProps) {
     else router.push("/overview");
   };
 
-  const specs: { label: string; value: string | number | null }[] = asset
-    ? [
-        { label: "Fabricante", value: asset.manufacturer },
-        { label: "Modelo", value: asset.model },
-        { label: "Número de série", value: asset.serial_number },
-        { label: "Potência (kW)", value: asset.power_kw },
-        { label: "Tensão (V)", value: asset.voltage_v },
-        { label: "Corrente nominal (A)", value: asset.nominal_current_a },
-        { label: "Rotação nominal (RPM)", value: asset.nominal_rpm },
-        { label: "Ligação", value: asset.connection_type },
-        { label: "Classe de isolamento", value: asset.insulation_class },
-        { label: "Grau de proteção", value: asset.ip_rating },
-      ]
-    : [];
+  // Campos de PLACA (potencia, ligacao, classe de isolamento...) so existem
+  // para um motor com placa lida. Num conjunto montado como a bancada da Forzy
+  // eles nao se aplicam - mostrar "--" numa linha inaplicavel parece defeito.
+  // Entao o conjunto lista o que de fato se sabe dele: o que veio do cadastro
+  // e o que foi medido no CAD e na instrumentacao.
+  const specs: { label: string; value: string | number | null }[] = !asset
+    ? []
+    : isGroup
+      ? [
+          { label: "Fabricante", value: asset.manufacturer },
+          { label: "Modelo", value: asset.model },
+          { label: "Tensão (V)", value: asset.voltage_v },
+          { label: "Tipo", value: "Conjunto motor-bomba (bancada de teste)" },
+          { label: "Pontos de medição", value: points.length },
+          { label: "Instrumentação", value: "Sensor IO-Link por mancal" },
+          {
+            label: "Dimensões (mm)",
+            value: `${BENCH_SIZE.length * 1000} × ${BENCH_SIZE.depth * 1000} × ${
+              BENCH_SIZE.height * 1000
+            }`,
+          },
+          { label: "Origem das dimensões", value: "Malha do CAD da Forzy" },
+        ]
+      : [
+          { label: "Fabricante", value: asset.manufacturer },
+          { label: "Modelo", value: asset.model },
+          { label: "Número de série", value: asset.serial_number },
+          { label: "Potência (kW)", value: asset.power_kw },
+          { label: "Tensão (V)", value: asset.voltage_v },
+          { label: "Corrente nominal (A)", value: asset.nominal_current_a },
+          { label: "Rotação nominal (RPM)", value: asset.nominal_rpm },
+          { label: "Ligação", value: asset.connection_type },
+          { label: "Classe de isolamento", value: asset.insulation_class },
+          { label: "Grau de proteção", value: asset.ip_rating },
+        ];
 
   return (
     <AppShell>
@@ -210,7 +232,7 @@ export default function AssetPage({ params }: AssetPageProps) {
           <>
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-slate-100">{asset.tag}</h1>
-              <StatusBadge status={effectiveStatus(asset, points)} />
+              <StatusBadge status={asset.status} />
               <span className="text-slate-400">{asset.name}</span>
               <LineageBadge asset={asset} />
               {showValidate && (
@@ -338,7 +360,15 @@ export default function AssetPage({ params }: AssetPageProps) {
                     {specs.map((row) => (
                       <div key={row.label} className="flex justify-between gap-4">
                         <dt className="text-slate-400">{row.label}</dt>
-                        <dd className="text-right text-slate-200">{row.value ?? "--"}</dd>
+                        <dd
+                          className={
+                            row.value == null
+                              ? "text-right text-slate-500"
+                              : "text-right text-slate-200"
+                          }
+                        >
+                          {row.value ?? "Não informado"}
+                        </dd>
                       </div>
                     ))}
                   </dl>

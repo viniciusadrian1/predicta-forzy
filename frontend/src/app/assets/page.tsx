@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type CreateAssetInput, createAsset, getAssets } from "@/lib/api";
-import { effectiveStatus, pointsOf, rootAssets } from "@/lib/assetGroup";
+import { pointsOf, rootAssets } from "@/lib/assetGroup";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -230,7 +230,6 @@ export default function AssetsPage() {
               key={asset.id}
               asset={asset}
               points={pontos.length}
-              status={effectiveStatus(asset, pontos)}
             />
           );
         })}

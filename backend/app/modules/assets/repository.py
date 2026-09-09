@@ -92,6 +92,14 @@ class AssetRepository:
         result = await self._session.execute(stmt.order_by(Asset.tag))
         return list(result.scalars().all())
 
+    async def list_points(self, parent_tag: str | None = None) -> list[Asset]:
+        """Pontos de medicao: de um equipamento, ou todos se `parent_tag` vazio."""
+        stmt = select(Asset).where(Asset.parent_tag.is_not(None))
+        if parent_tag is not None:
+            stmt = stmt.where(Asset.parent_tag == parent_tag)
+        result = await self._session.execute(stmt.order_by(Asset.tag))
+        return list(result.scalars().all())
+
     async def list_hierarchy(self) -> list[Plant]:
         result = await self._session.execute(
             select(Plant)

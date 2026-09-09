@@ -8,13 +8,10 @@ import type { Asset } from "@/types";
 export function AssetCard({
   asset,
   points = 0,
-  status,
 }: {
   asset: Asset;
   /** Quantos pontos de medicao este ativo agrupa (0 = mede a si proprio). */
   points?: number;
-  /** Status efetivo (pior entre os pontos); default = o do proprio ativo. */
-  status?: string;
 }) {
   return (
     <Link href={`/asset/${asset.tag}`}>
@@ -24,7 +21,7 @@ export function AssetCard({
             <Cpu className="h-5 w-5 text-cyan-400" />
             <span className="text-lg font-semibold text-slate-100">{asset.tag}</span>
           </div>
-          <StatusBadge status={status ?? asset.status} />
+          <StatusBadge status={asset.status} />
         </div>
         <p className="mt-2 text-sm text-slate-300">{asset.name ?? "Sem descrição"}</p>
         {points > 0 && (

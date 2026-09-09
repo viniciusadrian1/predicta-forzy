@@ -9,6 +9,7 @@ import { Bot, CheckCircle2, Loader2, Send, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { voltGreeting, voltMessage } from "@/lib/api";
+import { useVolt } from "@/lib/volt";
 import { cn } from "@/lib/utils";
 import type { VoltReply, VoltState } from "@/types";
 
@@ -168,6 +169,17 @@ export function VoltChat() {
     setInput("");
     mutation.mutate(value);
   };
+
+  // Quem abriu o assistente a partir da tela de um ativo ja chega com a TAG:
+  // o fluxo do Volt comeca em "aguardando_ativo", entao mandamos a TAG como
+  // primeira mensagem e o usuario cai direto no "qual o sintoma?".
+  const consumeTag = useVolt((store) => store.consumeTag);
+  useEffect(() => {
+    if (bubbles.length !== 1 || mutation.isPending) return;
+    const tag = consumeTag();
+    if (tag) send(tag);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bubbles.length, mutation.isPending]);
 
   return (
     <div className="flex h-full flex-col">

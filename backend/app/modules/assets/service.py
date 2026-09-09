@@ -23,6 +23,26 @@ class PlantNotFoundError(Exception):
     """A planta referenciada nao existe."""
 
 
+# Pior estado vence ao consolidar um conjunto a partir dos seus pontos.
+_STATUS_RANK = {"unknown": 0, "ok": 1, "warning": 2, "critical": 3}
+
+
+def rollup_status(asset: Asset, points: list[Asset]) -> str:
+    """Status de um EQUIPAMENTO a partir dos seus pontos de medicao.
+
+    Um conjunto (ex.: o motor-bomba da Forzy) nao tem telemetria propria - quem
+    mede sao os mancais -, entao o avaliador nunca toca no status dele e ele
+    ficaria "desconhecido" para sempre. Derivar aqui, no servico, mantem a
+    arvore lateral, a planta, os KPIs e a tela do ativo dizendo a MESMA coisa.
+    """
+    if not points:
+        return asset.status
+    return max(
+        (p.status for p in points),
+        key=lambda status: _STATUS_RANK.get(status, 0),
+    )
+
+
 class AssetService:
     """Orquestra as operacoes do catalogo de ativos."""
 
@@ -31,12 +51,30 @@ class AssetService:
 
     # ------------------------- Assets -------------------------
     async def list_assets(self) -> list[Asset]:
-        return await self._repo.list_assets()
+        assets = await self._repo.list_assets()
+        by_parent: dict[str, list[Asset]] = {}
+        for asset in assets:
+            if asset.parent_tag:
+                by_parent.setdefault(asset.parent_tag, []).append(asset)
+        for asset in assets:
+            asset.status = rollup_status(asset, by_parent.get(asset.tag, []))
+        return assets
 
-    async def get_asset(self, tag: str) -> Asset:
+    async def _load_asset(self, tag: str) -> Asset:
+        """A ENTIDADE crua, para os caminhos de escrita.
+
+        `get_asset` sobrescreve `status` com o valor consolidado; como o objeto
+        e o mesmo que a sessao acompanha, quem for gravar depois persistiria o
+        derivado no banco sem querer. Escrita usa esta; leitura usa aquela.
+        """
         asset = await self._repo.get_asset_by_tag(tag)
         if asset is None:
             raise AssetNotFoundError(tag)
+        return asset
+
+    async def get_asset(self, tag: str) -> Asset:
+        asset = await self._load_asset(tag)
+        asset.status = rollup_status(asset, await self._repo.list_points(tag))
         return asset
 
     async def create_asset(self, payload: AssetIn) -> Asset:
@@ -47,7 +85,7 @@ class AssetService:
     async def update_asset(
         self, tag: str, payload: AssetUpdate, actor: str = "system", role: str = "system"
     ) -> Asset:
-        asset = await self.get_asset(tag)
+        asset = await self._load_asset(tag)
         coords_before = {"x": asset.position_x, "y": asset.position_y}
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(asset, field, value)
@@ -76,13 +114,13 @@ class AssetService:
         accountability exigida pela governanca (nenhum cadastro 100% automatico
         sem supervisao humana).
         """
-        asset = await self.get_asset(tag)
+        asset = await self._load_asset(tag)
         asset.validated_by = actor
         asset.validated_at = datetime.now(UTC)
         return await self._repo.update_asset(asset)
 
     async def delete_asset(self, tag: str) -> None:
-        await self._repo.delete_asset(await self.get_asset(tag))
+        await self._repo.delete_asset(await self._load_asset(tag))
 
     # --------------------- Plants / Areas ----------------------
     async def list_plants(self) -> list[Plant]:
@@ -110,4 +148,15 @@ class AssetService:
         return await self._repo.search_assets(search, status, asset_type, plant_id)
 
     async def get_hierarchy(self) -> list[Plant]:
-        return await self._repo.list_hierarchy()
+        plants = await self._repo.list_hierarchy()
+        # A arvore so traz equipamentos (o repo filtra os pontos de medicao),
+        # entao o status dos pontos precisa vir do banco para o rollup.
+        points: dict[str, list[Asset]] = {}
+        for point in await self._repo.list_points():
+            if point.parent_tag:
+                points.setdefault(point.parent_tag, []).append(point)
+        for plant in plants:
+            for area in plant.areas:
+                for asset in area.assets:
+                    asset.status = rollup_status(asset, points.get(asset.tag, []))
+        return plants

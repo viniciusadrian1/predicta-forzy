@@ -23,6 +23,7 @@ import {
   predictFault,
   sendMlFeedback,
 } from "@/lib/api";
+import { rulDaysLabel } from "@/lib/rul";
 import { useToasts } from "@/lib/toast";
 
 const SEVERITY_BORDER: Record<string, string> = {
@@ -189,8 +190,10 @@ export function AssetHealth({ tag }: { tag: string }) {
             rulDays !== null ? (
               <>
                 <p className="mt-2 text-2xl font-semibold text-slate-100">
-                  {rulDays}
-                  <span className="ml-1 text-sm font-normal text-slate-500">dias</span>
+                  {rulDaysLabel(rulDays)}
+                  <span className="ml-1 text-sm font-normal text-slate-500">
+                    {rulDays < 2 ? "dia" : "dias"}
+                  </span>
                 </p>
                 <div className="mt-1 h-2 w-full rounded bg-slate-800">
                   <div
@@ -200,8 +203,8 @@ export function AssetHealth({ tag }: { tag: string }) {
                 </div>
                 {rul.data.confidence_low_days !== null && (
                   <p className="mt-1 text-xs text-slate-500">
-                    Intervalo: {rul.data.confidence_low_days} —{" "}
-                    {rul.data.confidence_high_days} dias
+                    Intervalo: {rulDaysLabel(rul.data.confidence_low_days)} —{" "}
+                    {rulDaysLabel(rul.data.confidence_high_days ?? 0)} dias
                   </p>
                 )}
                 {rul.data.note && (

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { effectiveStatus, pointsOf, rootAssets } from "@/lib/assetGroup";
+import { pointsOf, rootAssets } from "@/lib/assetGroup";
 import type { Asset } from "@/types";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -43,7 +43,6 @@ export function PlantMap({ assets }: { assets: Asset[] }) {
         ...asset,
         position_x: avg((a) => a.position_x),
         position_y: avg((a) => a.position_y),
-        status: effectiveStatus(asset, points),
       };
     })
     .filter((a) => a !== null);
