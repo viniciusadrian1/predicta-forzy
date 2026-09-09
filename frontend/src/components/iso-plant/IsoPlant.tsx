@@ -16,7 +16,6 @@ import * as THREE from "three";
 import { BenchModel } from "@/components/BenchModel";
 import {
   BENCH,
-  BENCH_TAGS,
   axPos,
   bearingU,
   DEFAULT_BENCH_POINTS,
@@ -168,11 +167,15 @@ function BenchMesh() {
 /** A bancada no chao da planta, com um sensor clicavel sobre cada mancal. */
 function BenchMachine({
   assets,
+  parent,
   selectedTag,
   anySelected,
   onSelect,
 }: {
+  /** Os pontos de medicao (mancais) que compoem o conjunto. */
   assets: Asset[];
+  /** O EQUIPAMENTO que os agrupa; null se o pai nao veio na lista. */
+  parent: Asset | null;
   selectedTag: string | null;
   anySelected: boolean;
   onSelect: (tag: string) => void;
@@ -186,7 +189,8 @@ function BenchMachine({
   const rank = (st: string) => (st === "critical" ? 3 : st === "warning" ? 2 : st === "ok" ? 1 : 0);
   const worst = assets.reduce((w, a) => (rank(a.status) > rank(w) ? a.status : w), "unknown");
   const ringColor = statusColor(worst);
-  const benchSelected = assets.some((a) => a.tag === selectedTag);
+  const benchSelected =
+    assets.some((a) => a.tag === selectedTag) || parent?.tag === selectedTag;
   const dimmed = anySelected && !benchSelected;
 
   return (
@@ -259,15 +263,29 @@ function BenchMachine({
         );
       })}
 
-      {/* rotulo do conjunto */}
+      {/* Rotulo do conjunto — CLICAVEL. Era um <div> morto: pela planta so
+          dava para abrir os sensores, e o equipamento inteiro so pela arvore
+          lateral. Os badges dos mancais continuam ali para descer ao ponto. */}
       <Html position={[0, bs(1.35), 0]} center zIndexRange={[20, 0]}>
-        <div
-          className="whitespace-nowrap rounded-full border border-slate-700 bg-slate-900/85 px-2.5 py-1 text-[11px] font-semibold text-slate-100 shadow-md backdrop-blur"
-          style={{ opacity: dimmed ? 0.4 : 1 }}
+        <button
+          type="button"
+          disabled={!parent}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (parent) onSelect(parent.tag);
+          }}
+          title={parent ? `Abrir ${parent.tag}` : undefined}
+          className="whitespace-nowrap rounded-full border bg-slate-900/85 px-2.5 py-1 text-[11px] font-semibold text-slate-100 shadow-md backdrop-blur transition enabled:hover:border-cyan-500 enabled:hover:text-white"
+          style={{
+            opacity: dimmed ? 0.4 : 1,
+            borderColor: benchSelected ? ringColor : "#334155",
+          }}
         >
-          Bancada de bomba de teste
-          <span className="ml-1.5 font-normal text-slate-400">· 2 mancais</span>
-        </div>
+          {parent?.name ?? "Conjunto"}
+          <span className="ml-1.5 font-normal text-slate-400">
+            · {assets.length} {assets.length === 1 ? "mancal" : "mancais"}
+          </span>
+        </button>
       </Html>
     </group>
   );
@@ -278,12 +296,14 @@ function BenchMachine({
 function Scene({
   assets,
   benchAssets,
+  benchParent,
   heroTag,
   selectedTag,
   onSelect,
 }: {
   assets: Asset[];
   benchAssets: Asset[];
+  benchParent: Asset | null;
   heroTag: string | null;
   selectedTag: string | null;
   onSelect: (tag: string | null) => void;
@@ -318,6 +338,7 @@ function Scene({
       {benchAssets.length > 0 && (
         <BenchMachine
           assets={benchAssets}
+          parent={benchParent}
           selectedTag={selectedTag}
           anySelected={selectedTag !== null}
           onSelect={onSelect}
@@ -417,10 +438,16 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
     () => assets.filter((a) => a.position_x !== null && a.position_y !== null),
     [assets],
   );
-  // A bancada (MTR-F01/F02) e UM equipamento com dois mancais: renderizada uma
-  // unica vez, fora do laco das demais maquinas.
-  const benchAssets = useMemo(() => placed.filter((a) => BENCH_TAGS.includes(a.tag)), [placed]);
-  const otherAssets = useMemo(() => placed.filter((a) => !BENCH_TAGS.includes(a.tag)), [placed]);
+  // Pontos de medicao (parent_tag preenchido) formam UM equipamento, desenhado
+  // uma vez so. Antes o agrupamento era por TAG fixa; com parent_tag ele vale
+  // para qualquer conjunto que venha a existir, sem editar constante.
+  const benchAssets = useMemo(() => placed.filter((a) => a.parent_tag), [placed]);
+  const otherAssets = useMemo(() => placed.filter((a) => !a.parent_tag), [placed]);
+  // O pai nao tem coordenada propria (nao entra em `placed`), mas esta na lista.
+  const benchParent = useMemo(() => {
+    const tag = benchAssets[0]?.parent_tag;
+    return tag ? (assets.find((a) => a.tag === tag) ?? null) : null;
+  }, [assets, benchAssets]);
 
   const heroTag = useMemo(() => {
     const motors = otherAssets.filter((a) => a.asset_type === "motor");
@@ -429,7 +456,9 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
     return pool.reduce((best, a) => ((a.power_kw ?? 0) > (best.power_kw ?? 0) ? a : best)).tag;
   }, [otherAssets]);
 
-  const selected = placed.find((a) => a.tag === selectedTag) ?? null;
+  // Procura na lista inteira, nao so em `placed`: o conjunto nao tem
+  // coordenada propria e ficaria sem card ao ser selecionado.
+  const selected = assets.find((a) => a.tag === selectedTag) ?? null;
 
   return (
     <div className="relative h-[70vh] min-h-[520px] w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
@@ -441,6 +470,7 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
         <Scene
           assets={otherAssets}
           benchAssets={benchAssets}
+          benchParent={benchParent}
           heroTag={heroTag}
           selectedTag={selectedTag}
           onSelect={setSelectedTag}
