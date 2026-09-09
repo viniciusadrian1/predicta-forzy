@@ -124,7 +124,7 @@ export function RoleMaturityLadder({ currentRole }: RoleMaturityLadderProps) {
         </span>
         {currentRole && (
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-white/80" />
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
             Seu papel atual
           </span>
         )}
@@ -175,6 +175,15 @@ export function RoleMaturityLadder({ currentRole }: RoleMaturityLadderProps) {
                     }}
                   >
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* Marcador que a legenda anuncia: sem ele, "Seu papel
+                          atual" prometia uma bolinha que nunca era desenhada. */}
+                      {isActive && (
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: level.hex }}
+                        />
+                      )}
                       <span className="font-semibold text-slate-100" style={{ color: isActive ? level.hex : undefined }}>
                         {level.label}
                       </span>
@@ -247,6 +256,13 @@ export function RoleMaturityLadder({ currentRole }: RoleMaturityLadderProps) {
                       style={{ borderLeftColor: AUDITOR.hex }}
                     >
                       <div className="flex flex-wrap items-center gap-2">
+                        {currentRole === AUDITOR.role && (
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: AUDITOR.hex }}
+                          />
+                        )}
                         <span
                           className="font-semibold"
                           style={{

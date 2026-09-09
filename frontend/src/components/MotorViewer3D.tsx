@@ -97,7 +97,7 @@ function MotorBody() {
   return (
     <mesh rotation={[0, 0, Math.PI / 2]} receiveShadow castShadow>
       <cylinderGeometry args={[BODY_RADIUS, BODY_RADIUS, BODY_LENGTH, 48]} />
-      <meshStandardMaterial color="#4a5568" roughness={0.55} metalness={0.7} />
+      <meshStandardMaterial color="#7c8ba1" roughness={0.45} metalness={0.35} />
     </mesh>
   );
 }
@@ -111,7 +111,7 @@ function MotorShaft() {
         castShadow
       >
         <cylinderGeometry args={[SHAFT_RADIUS, SHAFT_RADIUS, SHAFT_OVERHANG, 24]} />
-        <meshStandardMaterial color="#94a3b8" roughness={0.3} metalness={0.9} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.28} metalness={0.5} />
       </mesh>
       <mesh
         position={[BODY_LENGTH / 2 + SHAFT_OVERHANG / 4, 0, 0]}
@@ -119,7 +119,7 @@ function MotorShaft() {
         castShadow
       >
         <cylinderGeometry args={[SHAFT_RADIUS, SHAFT_RADIUS, SHAFT_OVERHANG / 2, 24]} />
-        <meshStandardMaterial color="#94a3b8" roughness={0.3} metalness={0.9} />
+        <meshStandardMaterial color="#cbd5e1" roughness={0.28} metalness={0.5} />
       </mesh>
     </>
   );
@@ -133,7 +133,7 @@ function CoolingFins() {
         return (
           <mesh key={i} position={[x, 0, 0]} castShadow>
             <torusGeometry args={[BODY_RADIUS + 0.015, FIN_TUBE_RADIUS, 12, 48]} />
-            <meshStandardMaterial color="#2d3748" roughness={0.6} metalness={0.6} />
+            <meshStandardMaterial color="#5c6a80" roughness={0.5} metalness={0.35} />
           </mesh>
         );
       })}
@@ -145,7 +145,7 @@ function TerminalBox() {
   return (
     <mesh position={[0, BODY_RADIUS + TERMINAL_BOX_H / 2, 0]} castShadow>
       <boxGeometry args={[TERMINAL_BOX_W, TERMINAL_BOX_H, TERMINAL_BOX_D]} />
-      <meshStandardMaterial color="#2d3748" roughness={0.5} metalness={0.6} />
+      <meshStandardMaterial color="#5c6a80" roughness={0.45} metalness={0.35} />
     </mesh>
   );
 }
@@ -156,9 +156,9 @@ function EndCap({ side }: { side: "front" | "back" }) {
     <mesh position={[x, 0, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
       <circleGeometry args={[BODY_RADIUS, 48]} />
       <meshStandardMaterial
-        color="#374151"
-        roughness={0.5}
-        metalness={0.7}
+        color="#68788f"
+        roughness={0.45}
+        metalness={0.35}
         side={THREE.DoubleSide}
       />
     </mesh>
@@ -340,10 +340,14 @@ function MotorScene({
       <PerspectiveCamera makeDefault position={[0, 1.4, 2.8]} fov={42} />
       <OrbitControls enablePan={false} minDistance={1.5} maxDistance={5} maxPolarAngle={Math.PI * 0.85} />
 
-      <ambientLight intensity={0.45} />
-      <directionalLight position={[3, 5, 3]} intensity={1.2} castShadow />
-      <directionalLight position={[-3, 2, -2]} intensity={0.4} color="#93c5fd" />
-      <pointLight position={[0, 2, 0]} intensity={0.3} color="#e2e8f0" />
+      {/* Sem mapa de ambiente, metal alto nao tem o que refletir e a peca
+          apagava no fundo #020617. Base mais clara + metalness menor + esta
+          luz de preenchimento dao volume sem estourar os marcadores. */}
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[3, 5, 3]} intensity={1.35} castShadow />
+      <directionalLight position={[-3, 2, -2]} intensity={0.5} color="#93c5fd" />
+      <pointLight position={[0, 2, 0]} intensity={0.35} color="#e2e8f0" />
+      <hemisphereLight args={["#dbeafe", "#0f172a", 0.5]} />
 
       <group>
         <MotorBody />
