@@ -119,6 +119,31 @@ export default function RegisterPage() {
             </CardHeader>
             <CardContent>
               <p className={`mb-3 text-sm ${messageClass}`}>{result.message}</p>
+              {/* Sem o texto cru, "cobertura 0%" nao diz se o problema foi ler a
+                  imagem ou interpretar o que foi lido. Aberto por padrao quando
+                  nenhum campo saiu, que e justamente quando importa. */}
+              {result.raw_text !== undefined && (
+                <details
+                  open={result.fields.length === 0}
+                  className="mb-3 rounded-md border border-slate-800 bg-slate-950/60 p-3"
+                >
+                  <summary className="cursor-pointer text-xs text-slate-400">
+                    Texto lido pelo OCR ({result.raw_text.trim().length} caracteres)
+                  </summary>
+                  {result.raw_text.trim() ? (
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-300">
+                      {result.raw_text}
+                    </pre>
+                  ) : (
+                    <p className="mt-2 text-xs text-amber-400">
+                      O OCR não extraiu nenhum caractere desta imagem. Costuma ser
+                      foco, ângulo muito inclinado, reflexo na placa metálica ou
+                      texto pequeno demais no quadro — tente uma foto mais
+                      frontal, aproximada e sem brilho direto.
+                    </p>
+                  )}
+                </details>
+              )}
               <dl className="grid gap-1.5 text-sm sm:grid-cols-2">
                 {result.fields.map((field) => (
                   <div key={field.field} className="flex justify-between gap-3">

@@ -1,15 +1,19 @@
 """Testes do modulo de visao: parser de placas de identificacao."""
 
 import io
+from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from app.modules.vision import plate_ocr
 from app.modules.vision.plate_ocr import (
     EXPECTED_FIELDS,
     extract_nameplate,
+    get_ocr_engine,
     parse_generic_fields,
     parse_nameplate_text,
+    preprocess_image,
 )
 
 _NAMEPLATES: dict[str, str] = {
@@ -136,3 +140,64 @@ def test_extract_is_honest_without_engine(monkeypatch):
     assert result.engine == "indisponivel"
     assert result.fields == []
     assert result.coverage == 0.0
+
+
+# --- Caminho IMAGEM -> TEXTO -------------------------------------------------
+# O resto do arquivo exercita so o parser, contra strings fixas. A metade que
+# quebra na pratica (imagem -> texto) nao tinha teste nenhum: por isso um OCR
+# devolvendo zero caracteres passava despercebido ate chegar na tela.
+
+def _dir_amostras() -> Path:
+    """Sobe a arvore ate achar assets/nameplates_samples.
+
+    Caminho relativo fixo quebra conforme o teste roda do repo ou de dentro do
+    container, onde o backend fica em /app.
+    """
+    for base in Path(__file__).resolve().parents:
+        candidato = base / "assets" / "nameplates_samples"
+        if candidato.is_dir():
+            return candidato
+    return Path(__file__).resolve().parents[2] / "assets" / "nameplates_samples"
+
+
+_AMOSTRAS = _dir_amostras()
+
+
+def _placas() -> list[Path]:
+    return sorted(_AMOSTRAS.glob("placa_*.png"))
+
+
+@pytest.mark.skipif(get_ocr_engine() is None, reason="tesseract ausente no ambiente")
+def test_ocr_le_as_placas_reais_do_repositorio():
+    """As placas versionadas precisam sair com todos os campos principais."""
+    assert _placas(), f"nenhuma amostra em {_AMOSTRAS}"
+    for caminho in _placas():
+        resultado = extract_nameplate(caminho.read_bytes())
+        assert resultado.raw_text.strip(), f"{caminho.name}: OCR nao leu nada"
+        assert resultado.coverage >= 0.8, f"{caminho.name}: cobertura {resultado.coverage}"
+        extraidos = {f.field: f.value for f in resultado.fields if f.value}
+        for campo in ("manufacturer", "power_kw", "voltage_v", "nominal_rpm"):
+            assert campo in extraidos, f"{caminho.name}: faltou {campo}"
+
+
+@pytest.mark.skipif(get_ocr_engine() is None, reason="tesseract ausente no ambiente")
+def test_fallback_psm6_resgata_placa_degradada():
+    """Placa girada demais zera no modo padrao; o fallback ainda le algo.
+
+    Trava a correcao do "cobertura 0%": o PSM 3 (layout de PAGINA) conclui que
+    uma placa muito inclinada nao tem bloco de texto valido e devolve ZERO
+    palavras. O PSM 6 entra como segunda tentativa. Vale como nao-regressao
+    tambem: se alguem trocar o padrao por PSM 6, o teste acima e que cobra.
+    """
+    engine = get_ocr_engine()
+    original = Image.open(_placas()[0])
+    girada = original.rotate(12, expand=True, fillcolor=255)
+    buffer = io.BytesIO()
+    girada.convert("RGB").save(buffer, format="PNG")
+    imagem = preprocess_image(buffer.getvalue())
+
+    padrao, _ = engine._read(imagem, config="")
+    com_fallback, _ = engine.read_text(imagem)
+
+    assert not padrao.strip(), "amostra deixou de ser um caso de PSM 3 vazio"
+    assert com_fallback.strip(), "o fallback PSM 6 nao resgatou a leitura"

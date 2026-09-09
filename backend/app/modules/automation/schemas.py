@@ -26,6 +26,9 @@ class RpaRegisterResult(BaseModel):
 
     ocr_engine: str
     ocr_coverage: float
+    # Texto CRU do OCR. Sem ele, "cobertura 0%" e um beco sem saida: nao da
+    # para saber se o motor nao leu nada ou se leu e o parser nao casou.
+    raw_text: str = ""
     fields: list[NameplateField]
     draft: AssetDraft
     duplicate: bool

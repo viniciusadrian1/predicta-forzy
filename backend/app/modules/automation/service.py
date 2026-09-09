@@ -142,6 +142,7 @@ class RpaService:
         return RpaRegisterResult(
             ocr_engine=extraction.engine,
             ocr_coverage=extraction.coverage,
+            raw_text=extraction.raw_text,
             fields=fields,
             draft=draft,
             duplicate=duplicate,

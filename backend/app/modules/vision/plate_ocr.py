@@ -302,14 +302,18 @@ class TesseractEngine:
         # Falha aqui (binario ausente) faz get_ocr_engine cair para None.
         pytesseract.get_tesseract_version()
 
-    def read_text(self, image: Image.Image) -> tuple[str, float]:
+    def _read(self, image: "Image.Image", config: str) -> tuple[str, float]:
+        """Uma passada do tesseract, reconstruindo o texto por linha."""
         # Portugues + ingles; falha de idioma recai para o default do sistema.
         try:
-            data = self._pt.image_to_data(image, lang="por+eng", output_type=self._pt.Output.DICT)
+            data = self._pt.image_to_data(
+                image, lang="por+eng", config=config, output_type=self._pt.Output.DICT
+            )
         except Exception:
-            data = self._pt.image_to_data(image, output_type=self._pt.Output.DICT)
+            data = self._pt.image_to_data(
+                image, config=config, output_type=self._pt.Output.DICT
+            )
 
-        # Reconstroi o texto por linha e coleta as confiancas dos tokens validos.
         lines: dict[tuple[int, int, int], list[str]] = {}
         confidences: list[float] = []
         for i, word in enumerate(data["text"]):
@@ -324,6 +328,25 @@ class TesseractEngine:
         text = "\n".join(" ".join(words) for words in lines.values())
         mean = sum(confidences) / len(confidences) if confidences else 0.0
         return text, mean
+
+    def read_text(self, image: "Image.Image") -> tuple[str, float]:
+        """Le a placa, com uma segunda tentativa quando a primeira vem vazia.
+
+        O modo padrao (PSM 3, analise de layout de PAGINA) as vezes conclui que
+        uma placa muito degradada - girada, desfocada - nao tem bloco de texto
+        valido e devolve ZERO palavras, o que vira "cobertura 0%" na tela. Nesses
+        casos o PSM 6 ("um unico bloco uniforme de texto"), que descreve melhor
+        uma placa, ainda consegue ler.
+
+        O PSM 6 entra so como SEGUNDA tentativa, nunca como padrao: medido sobre
+        as placas de assets/nameplates_samples em variantes giradas e desfocadas,
+        troca-lo por padrao resgata os casos vazios mas PIORA varios que hoje
+        acertam. Como fallback, o caminho que ja funciona fica intacto.
+        """
+        text, mean = self._read(image, config="")
+        if text.strip():
+            return text, mean
+        return self._read(image, config="--psm 6")
 
 
 @lru_cache(maxsize=1)

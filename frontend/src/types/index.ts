@@ -176,6 +176,8 @@ export interface AssetDraft {
 export interface RpaResult {
   ocr_engine: string;
   ocr_coverage: number;
+  /** Texto cru lido pelo OCR — mostra SE o motor leu algo quando a cobertura da 0%. */
+  raw_text: string;
   fields: NameplateField[];
   draft: AssetDraft;
   duplicate: boolean;
