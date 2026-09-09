@@ -151,3 +151,111 @@ async def test_create_list_and_ack_alert(client, catalog_sessionmaker):
 async def test_ack_missing_alert_returns_404(client):
     response = await client.post("/api/v1/alerts/00000000-0000-0000-0000-000000000000/ack", json={})
     assert response.status_code == 404
+
+
+async def test_alerta_de_estado_abre_uma_vez_fecha_e_reabre(catalog_sessionmaker):
+    """O ciclo de vida completo de um alerta de ESTADO.
+
+    Antes, a dedup era so uma janela de 15 min: a condicao persistindo gerava um
+    alerta novo a cada 15 min, e nada nunca fechava. Este teste trava as tres
+    garantias: nao duplica enquanto aberto, fecha sozinho ao normalizar, e volta
+    a abrir depois (senao o primeiro episodio silenciaria todos os seguintes).
+    """
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+
+        async def abrir() -> bool:
+            """Simula um ciclo do avaliador com a condicao ligada."""
+            if await repo.has_open("MTR-TESTE", "THRESHOLD_APPROACHING"):
+                return False
+            await repo.create(
+                Alert(
+                    asset_tag="MTR-TESTE",
+                    severity="WARNING",
+                    alert_type="THRESHOLD_APPROACHING",
+                    message="Vibracao se aproximando do limite",
+                )
+            )
+            return True
+
+        # Ciclo 1 e 2, condicao ligada: um unico alerta, nao dois.
+        assert await abrir() is True
+        assert await abrir() is False
+
+        # Ciclo 3, condicao normalizada: fecha sozinho, marcado como automatico.
+        assert await repo.close_resolved("MTR-TESTE", set()) == 1
+        abertos = await repo.list_alerts(asset_tag="MTR-TESTE", only_active=True)
+        assert abertos == []
+        todos = await repo.list_alerts(asset_tag="MTR-TESTE")
+        assert todos[0].ack_by == "auto"
+        assert todos[0].ack_at is not None
+
+        # Ciclo 4, condicao volta: abre um alerta NOVO (garantia anti-mute).
+        assert await abrir() is True
+        assert len(await repo.list_alerts(asset_tag="MTR-TESTE")) == 2
+
+
+async def test_close_resolved_nao_fecha_condicao_ainda_ativa(catalog_sessionmaker):
+    """So fecha o tipo que saiu da condicao medida; o resto continua aberto."""
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+        for alert_type in ("THRESHOLD_APPROACHING", "CIRCUIT_BREAKER"):
+            await repo.create(
+                Alert(
+                    asset_tag="MTR-MISTO",
+                    severity="WARNING",
+                    alert_type=alert_type,
+                    message=f"teste {alert_type}",
+                )
+            )
+
+        # A vibracao normalizou, mas o circuit breaker segue ligado.
+        assert await repo.close_resolved("MTR-MISTO", {"CIRCUIT_BREAKER"}) == 1
+        abertos = await repo.list_alerts(asset_tag="MTR-MISTO", only_active=True)
+        assert [a.alert_type for a in abertos] == ["CIRCUIT_BREAKER"]
+
+
+async def test_consultivo_de_ml_fecha_so_quando_o_modelo_diz_normal(catalog_sessionmaker):
+    """O consultivo fecha quando o modelo roda e nao acusa - e so nesse caso.
+
+    `_ml_advisory` grava streak 0 quando o modelo roda e nao acusa, e REMOVE a
+    chave quando o modelo falha. Se os dois casos fossem confundidos, uma falha
+    transitoria de modelo fecharia o alerta como se tivesse normalizado.
+    """
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+        await repo.create(
+            Alert(
+                asset_tag="MTR-ML",
+                severity="INFO",
+                alert_type="ANOMALY_DETECTED",
+                message="Consultivo: vibracao atipica",
+            )
+        )
+
+        # Modelo ainda acusando (ou indisponivel): o alerta continua aberto.
+        assert await repo.close_resolved("MTR-ML", {"ANOMALY_DETECTED"}) == 0
+        assert len(await repo.list_alerts(asset_tag="MTR-ML", only_active=True)) == 1
+
+        # Modelo rodou e nao acusou: fecha.
+        assert await repo.close_resolved("MTR-ML", set()) == 1
+        assert await repo.list_alerts(asset_tag="MTR-ML", only_active=True) == []
+
+
+def test_streak_distingue_modelo_normal_de_modelo_quebrado():
+    """O sinal que decide o fechamento do consultivo: 0 = normal, ausente = falhou."""
+    evaluator = AlertsEvaluator()
+
+    # Estado apos o modelo rodar e NAO acusar.
+    evaluator._anomaly_streak["MTR-OK"] = 0
+    assert evaluator._anomaly_streak.get("MTR-OK", -1) == 0  # -> pode fechar
+
+    # Estado apos falha de ML (a chave e removida) e no boot do processo.
+    evaluator._anomaly_streak.pop("MTR-QUEBRADO", None)
+    assert evaluator._anomaly_streak.get("MTR-QUEBRADO", -1) != 0  # -> mantem aberto

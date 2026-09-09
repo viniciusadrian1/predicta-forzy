@@ -37,8 +37,10 @@ TEMP_WARNING = 95.0
 TEMP_CRITICAL = 105.0
 RUL_WARNING_DAYS = 45.0
 RUL_CRITICAL_DAYS = 15.0
-# Janela de deduplicacao: nao recria o mesmo tipo de alerta nesse intervalo.
-DEDUP_MINUTES = 15
+# Um alerta abre uma vez e fecha quando a condicao normaliza (ver
+# AlertRepository.has_open / close_resolved). Nao ha janela de deduplicacao por
+# tempo: enquanto a condicao valer, e o mesmo episodio - o que da, de brinde, a
+# DURACAO do episodio (created_at -> ack_at).
 # ponytail: aceleracao minima esperada quando ha vibracao relevante - abaixo
 # disso com velocidade alta indica divergencia (falha de sensor). Calibrar.
 ACCEL_DIVERGENCE_MIN = 0.02
@@ -135,8 +137,27 @@ class AlertsEvaluator:
         created: list[Alert] = []
         async with catalog_session_factory() as cat_session:
             repo = AlertRepository(cat_session)
+            active_types = {alert_type for _, alert_type, _, _ in physical}
+            # O consultivo de ML so conta como RESOLVIDO quando o modelo rodou e
+            # nao acusou: `_ml_advisory` grava streak 0 nesse caso e REMOVE a
+            # chave quando falha. Chave ausente = nao sabemos = mantem aberto,
+            # senao uma falha transitoria de modelo fecharia o alerta sozinho.
+            if self._anomaly_streak.get(asset_tag, -1) != 0:
+                active_types.add("ANOMALY_DETECTED")
+            # Fecha o que normalizou ANTES de avaliar os novos: o mesmo insumo
+            # (`physical`) que _sync_asset_status usa para curar o badge - antes
+            # o badge se curava sozinho e os alertas ficavam pendurados.
+            closed = await repo.close_resolved(asset_tag, active_types)
+            if closed:
+                logger.info(
+                    "alertas fechados por normalizacao: %d",
+                    closed,
+                    extra={"event": "alert_auto_closed", "asset_tag": asset_tag},
+                )
+
             for severity, alert_type, message, score in candidates:
-                if await repo.has_recent_unacked(asset_tag, alert_type, DEDUP_MINUTES):
+                # Enquanto a condicao seguir verdadeira, e o MESMO episodio.
+                if await repo.has_open(asset_tag, alert_type):
                     continue
                 alert = await repo.create(
                     Alert(

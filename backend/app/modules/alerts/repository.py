@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.alerts.models import Alert
@@ -44,21 +44,58 @@ class AlertRepository:
     async def get(self, alert_id: UUID) -> Alert | None:
         return await self._session.get(Alert, alert_id)
 
-    async def has_recent_unacked(self, asset_tag: str, alert_type: str, minutes: int) -> bool:
-        """Indica se ja existe um alerta similar nao reconhecido recente."""
-        since = datetime.now(UTC) - timedelta(minutes=minutes)
+    async def has_open(self, asset_tag: str, alert_type: str) -> bool:
+        """Indica se ja existe um alerta ABERTO deste tipo para o ativo.
+
+        Sem janela de tempo: enquanto a condicao seguir verdadeira o alerta
+        continua sendo o mesmo episodio, e nao um alerta novo a cada ciclo.
+        """
         stmt = (
             select(Alert.id)
             .where(
                 Alert.asset_tag == asset_tag,
                 Alert.alert_type == alert_type,
                 Alert.acknowledged == False,  # noqa: E712
-                Alert.created_at >= since,
             )
             .limit(1)
         )
         result = await self._session.execute(stmt)
         return result.first() is not None
+
+    async def close_resolved(self, asset_tag: str, active_types: set[str]) -> int:
+        """Fecha os alertas de ESTADO cuja condicao nao vale mais.
+
+        Contrapartida de ``has_open``: sem isto, "ativo" significaria apenas
+        "foi verdade uma vez e ninguem reconheceu", e o primeiro episodio
+        silenciaria todos os seguintes. ``ack_by="auto"`` distingue o
+        fechamento automatico do reconhecimento humano na trilha de auditoria.
+        """
+        governed = {
+            "THRESHOLD_APPROACHING",
+            "THRESHOLD_EXCEEDED",
+            "CIRCUIT_BREAKER",
+            "ANOMALY_DETECTED",
+        }
+        stale = governed - active_types
+        if not stale:
+            return 0
+        stmt = (
+            update(Alert)
+            .where(
+                Alert.asset_tag == asset_tag,
+                Alert.acknowledged == False,  # noqa: E712
+                Alert.alert_type.in_(stale),
+            )
+            .values(
+                acknowledged=True,
+                ack_by="auto",
+                ack_at=datetime.now(UTC),
+                ack_comment="Fechado automaticamente: condicao normalizada.",
+            )
+        )
+        result = await self._session.execute(stmt)
+        await self._session.commit()
+        return int(result.rowcount or 0)
 
     async def acknowledge(self, alert: Alert, actor: str, comment: str | None = None) -> Alert:
         alert.acknowledged = True
@@ -68,12 +105,3 @@ class AlertRepository:
         await self._session.commit()
         await self._session.refresh(alert)
         return alert
-
-    async def active_severities(self, asset_tag: str) -> list[str]:
-        """Severidades dos alertas ativos (nao reconhecidos) de um ativo."""
-        stmt = select(Alert.severity).where(
-            Alert.asset_tag == asset_tag,
-            Alert.acknowledged == False,  # noqa: E712
-        )
-        result = await self._session.execute(stmt)
-        return [row[0] for row in result.all()]
