@@ -194,7 +194,21 @@ function BenchMachine({
   const dimmed = anySelected && !benchSelected;
 
   return (
-    <group position={[x, 0, z]}>
+    <group
+      position={[x, 0, z]}
+      // O CORPO do conjunto abre o equipamento, como o MTR-001 ja fazia. As
+      // esferas dos mancais dao stopPropagation, entao clicar num sensor
+      // continua indo para o ponto de medicao: os dois caminhos convivem.
+      onClick={(e) => {
+        e.stopPropagation();
+        if (parent) onSelect(parent.tag);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => (document.body.style.cursor = "auto")}
+    >
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[2.4, 2.75, 56]} />
         <meshBasicMaterial
@@ -206,6 +220,13 @@ function BenchMachine({
       </mesh>
 
       <BenchMesh />
+
+      {/* Alvo de clique do conjunto. A malha do CAD tem vaos, e o raio do
+          mouse passava entre as pecas: sem esta caixa invisivel, "clicar no
+          motor" so funcionava por sorte. Nao recebe sombra nem aparece. */}
+      <mesh position={[0, bs(BENCH_CL * 0.7), 0]} visible={false}>
+        <boxGeometry args={[bs(BENCH.skid.len * 1.05), bs(0.85), bs(BENCH.skid.w * 1.1)]} />
+      </mesh>
 
       {/* um sensor clicavel sobre cada mancal */}
       {DEFAULT_BENCH_POINTS.map((point) => {

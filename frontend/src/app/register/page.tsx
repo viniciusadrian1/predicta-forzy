@@ -13,6 +13,23 @@ import { hasRole, useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/usePageTitle";
 import type { RpaResult } from "@/types";
 
+// Ordem de exibicao dos campos de placa — a mesma sequencia usada na tela do
+// ativo e nos manuais, para o tecnico ler sempre no mesmo lugar.
+const ORDEM_DOS_CAMPOS = [
+  "manufacturer",
+  "model",
+  "serial_number",
+  "power_kw",
+  "voltage_v",
+  "nominal_current_a",
+  "frequency_hz",
+  "nominal_rpm",
+  "insulation_class",
+  "ip_rating",
+  "service_factor",
+  "power_factor",
+];
+
 export default function RegisterPage() {
   usePageTitle("Cadastro por foto");
   const role = useAuth((state) => state.role);
@@ -118,75 +135,79 @@ export default function RegisterPage() {
               </p>
             </CardHeader>
             <CardContent>
-              <p className={`mb-3 text-sm ${messageClass}`}>{result.message}</p>
-              {/* Diagnostico da leitura. Fica DEPOIS dos campos e recolhido:
-                  e ferramenta de apoio para quando o OCR falha, nao o
-                  resultado. Antes vinha antes de tudo, aberto, com o texto cru
-                  ocupando a tela inteira. */}
-              {result.fields.length === 0 && (
-                <p className="mb-4 rounded-md border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-300">
-                  Nenhum campo foi reconhecido. Confira o diagnóstico da leitura
-                  abaixo e, se necessário, preencha o cadastro manualmente.
-                </p>
-              )}
-              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                {result.fields.map((field) => (
-                  <div key={field.field} className="min-w-0">
-                    <dt className="text-xs text-slate-500">{field.label}</dt>
-                    <dd className="truncate text-sm text-slate-200" title={field.value ?? undefined}>
-                      {field.value ?? "--"}
-                      {/* Confianca baixa em amarelo: o rascunho vai para o
-                          cadastro, e um valor duvidoso precisa puxar o olho de
-                          quem revisa em vez de passar como cinza discreto. */}
-                      <span
-                        className={`ml-1 text-xs ${
-                          field.confidence < 0.5 ? "text-amber-400" : "text-slate-500"
-                        }`}
-                        title={
-                          field.confidence < 0.5
-                            ? "Confiança baixa — confira este campo na placa"
-                            : undefined
-                        }
-                      >
-                        {Math.round(field.confidence * 100)}%
-                      </span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              <p className={`mb-4 text-sm ${messageClass}`}>{result.message}</p>
 
-              {/* Diagnostico da leitura, recolhido. */}
-              {result.raw_text !== undefined && (
-                <details className="group mt-5 border-t border-slate-800 pt-3">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-slate-500 transition-colors hover:text-slate-300">
-                    <span className="transition-transform group-open:rotate-90">›</span>
-                    Diagnóstico da leitura
-                    <span className="text-slate-600">
-                      · {result.raw_text.trim().length} caracteres lidos
-                    </span>
-                  </summary>
-                  {result.raw_text.trim() ? (
-                    <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950/70 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
-                      {result.raw_text}
-                    </pre>
-                  ) : (
-                    <p className="mt-3 text-xs leading-relaxed text-slate-400">
-                      O OCR não extraiu nenhum caractere desta imagem. Costuma ser
-                      foco, ângulo muito inclinado, reflexo na placa metálica ou
-                      texto pequeno demais no quadro — tente uma foto mais
-                      frontal, aproximada e sem brilho direto.
-                    </p>
+              {result.fields.length === 0 ? (
+                <div className="rounded-md border border-amber-900/60 bg-amber-950/30 px-4 py-3">
+                  <p className="text-sm font-medium text-amber-300">
+                    Nenhum campo foi reconhecido nesta imagem.
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-amber-200/70">
+                    Costuma ser foco, ângulo muito inclinado, reflexo na plaqueta
+                    metálica ou texto pequeno demais no quadro. Tente uma foto mais
+                    frontal, aproximada e sem brilho direto — ou preencha o cadastro
+                    manualmente.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Campos como METRICAS, no mesmo padrao do resto do sistema:
+                      rotulo pequeno acima, valor em destaque. Antes eram pares
+                      soltos numa linha, e o texto cru do OCR vinha junto. */}
+                  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {ORDEM_DOS_CAMPOS.map((chave) => {
+                      const campo = result.fields.find((f) => f.field === chave);
+                      if (!campo?.value) return null;
+                      const baixa = campo.confidence < 0.5;
+                      return (
+                        <div
+                          key={chave}
+                          className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2.5"
+                        >
+                          <dt className="truncate text-[11px] uppercase tracking-wide text-slate-500">
+                            {campo.label}
+                          </dt>
+                          <dd
+                            className="mt-0.5 truncate text-base font-semibold text-slate-100"
+                            title={campo.value}
+                          >
+                            {campo.value}
+                          </dd>
+                          {/* Confianca baixa puxa o olho: o rascunho vai para o
+                              cadastro, e ninguem desconfia do que ja veio
+                              preenchido. */}
+                          <dd
+                            className={`mt-1 text-[10px] ${
+                              baixa ? "text-amber-400" : "text-slate-600"
+                            }`}
+                          >
+                            {baixa ? "confira na placa · " : ""}
+                            {Math.round(campo.confidence * 100)}% de confiança
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                  {result.fields.some((f) => f.value && !ORDEM_DOS_CAMPOS.includes(f.field)) && (
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {result.fields
+                        .filter((f) => f.value && !ORDEM_DOS_CAMPOS.includes(f.field))
+                        .map((campo) => (
+                          <div
+                            key={campo.field}
+                            className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2.5"
+                          >
+                            <dt className="truncate text-[11px] uppercase tracking-wide text-slate-500">
+                              {campo.label}
+                            </dt>
+                            <dd className="mt-0.5 truncate text-base font-semibold text-slate-100">
+                              {campo.value}
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
                   )}
-                </details>
-              )}
-              {showOpenAsset && (
-                <Link
-                  href={`/asset/${encodeURIComponent(resultTag)}`}
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-cyan-400 hover:text-cyan-300"
-                >
-                  Abrir ativo {resultTag}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+                </>
               )}
             </CardContent>
           </Card>
