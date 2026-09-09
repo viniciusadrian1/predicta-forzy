@@ -2,15 +2,15 @@
 
 // Planta isometrica 3D (three.js / R3F). Cada ativo com coordenada vira uma
 // maquina no chao de fabrica, posicionada por (position_x, position_y) ∈ [0,1].
-// O motor "heroi" (o de maior potencia) usa o modelo real /models/motor.glb
-// quando presente; caso contrario, uma malha procedural estilizada.
+// Os motores usam a MESMA malha da pagina do ativo (three/MotorMesh), para o
+// mesmo equipamento nao parecer outro conforme a tela.
 // Carregado dinamicamente (ssr: false) pela pagina da planta.
 
-import { ContactShadows, Html, OrbitControls, useGLTF } from "@react-three/drei";
+import { ContactShadows, Html, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ArrowRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { BenchModel } from "@/components/BenchModel";
@@ -21,6 +21,7 @@ import {
   bearingU,
   DEFAULT_BENCH_POINTS,
 } from "@/lib/benchGeometry";
+import { MotorMesh } from "@/components/three/MotorMesh";
 import type { Asset } from "@/types";
 
 // -- dados de apoio ---------------------------------------------------------
@@ -42,7 +43,6 @@ const STATUS_LABEL: Record<string, string> = {
 // Mundo (proporcao ~ da planta baixa 1000x640).
 const WORLD_W = 30;
 const WORLD_D = 18;
-const MOTOR_GLB = "/models/motor.glb";
 
 /** (x,y) normalizado -> coordenadas do chao (x, z). */
 function toFloor(px: number | null, py: number | null): [number, number] {
@@ -55,107 +55,17 @@ function statusColor(status: string): string {
 
 // -- motor procedural (fallback / maquinas nao-heroi) -----------------------
 
-function ProceduralMotor({ tint, spin }: { tint: string; spin: boolean }) {
-  const fan = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (spin && fan.current) fan.current.rotation.x += delta * 3.2;
-  });
-
-  const body = useMemo(
-    () => ({ color: new THREE.Color("#64748b").lerp(new THREE.Color(tint), 0.35) }),
-    [tint],
-  );
-  const fins = useMemo(() => Array.from({ length: 12 }, (_, i) => (i / 12) * Math.PI * 2), []);
-
-  return (
-    <group>
-      {/* base / pes */}
-      <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
-        <boxGeometry args={[3.2, 0.16, 1.5]} />
-        <meshStandardMaterial color="#334155" metalness={0.3} roughness={0.7} />
-      </mesh>
-      {/* carcaca (estator) com aletas */}
-      <group position={[0, 0.95, 0]}>
-        <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.8, 0.8, 2.2, 32]} />
-          <meshStandardMaterial {...body} metalness={0.5} roughness={0.5} />
-        </mesh>
-        {fins.map((a) => (
-          <group key={a} rotation={[a, 0, 0]}>
-            <mesh position={[0, 0.88, 0]}>
-              <boxGeometry args={[2.05, 0.16, 0.05]} />
-              <meshStandardMaterial {...body} metalness={0.5} roughness={0.5} />
-            </mesh>
-          </group>
-        ))}
-        {/* eixo + flange (dianteira) */}
-        <mesh position={[1.55, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.13, 0.13, 1.0, 16]} />
-          <meshStandardMaterial color="#cbd5e1" metalness={0.8} roughness={0.25} />
-        </mesh>
-        {/* ventoinha (traseira) */}
-        <group ref={fan} position={[-1.35, 0, 0]}>
-          <mesh rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.26, 0.26, 0.14, 16]} />
-            <meshStandardMaterial {...body} />
-          </mesh>
-          {Array.from({ length: 6 }, (_, i) => (i / 6) * Math.PI * 2).map((a) => (
-            <group key={a} rotation={[a, 0, 0]}>
-              <mesh position={[0, 0.42, 0]}>
-                <boxGeometry args={[0.08, 0.6, 0.18]} />
-                <meshStandardMaterial {...body} />
-              </mesh>
-            </group>
-          ))}
-        </group>
-        {/* caixa de ligacao */}
-        <mesh position={[0.2, 0.95, 0]} castShadow>
-          <boxGeometry args={[0.6, 0.42, 0.55]} />
-          <meshStandardMaterial {...body} metalness={0.4} roughness={0.6} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
-
-// -- motor real via glTF (quando /models/motor.glb existe) ------------------
-
-function GlbMotor() {
-  const { scene } = useGLTF(MOTOR_GLB);
-  // Normaliza escala/posicao: encaixa numa altura alvo e apoia no chao.
-  const model = useMemo(() => {
-    const clone = scene.clone(true);
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    const scale = 2.4 / Math.max(size.y, 0.001);
-    clone.scale.setScalar(scale);
-    clone.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
-    clone.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-      }
-    });
-    return clone;
-  }, [scene]);
-  return <primitive object={model} />;
-}
-
 // -- uma maquina no chao ----------------------------------------------------
 
 interface MachineProps {
   asset: Asset;
   hero: boolean;
-  useGlb: boolean;
   selected: boolean;
   anySelected: boolean;
   onSelect: (tag: string) => void;
 }
 
-function Machine({ asset, hero, useGlb, selected, anySelected, onSelect }: MachineProps) {
+function Machine({ asset, hero, selected, anySelected, onSelect }: MachineProps) {
   const [x, z] = toFloor(asset.position_x, asset.position_y);
   const color = statusColor(asset.status);
   const scale = hero ? 1 : 0.62;
@@ -193,13 +103,10 @@ function Machine({ asset, hero, useGlb, selected, anySelected, onSelect }: Machi
           </mesh>
         )}
 
-        {hero && useGlb ? (
-          <Suspense fallback={<ProceduralMotor tint={color} spin={asset.status === "ok"} />}>
-            <GlbMotor />
-          </Suspense>
-        ) : (
-          <ProceduralMotor tint={color} spin={hero && asset.status === "ok"} />
-        )}
+        {/* Mesma malha da pagina do ativo: um motor so no sistema inteiro. */}
+        <group scale={hero ? 1.55 : 1.0} position={[0, hero ? 0.75 : 0.5, 0]}>
+          <MotorMesh withFeet />
+        </group>
       </group>
 
       {/* Badge com tamanho de tela fixo (sem distanceFactor, para nao inflar a
@@ -372,14 +279,12 @@ function Scene({
   assets,
   benchAssets,
   heroTag,
-  useGlb,
   selectedTag,
   onSelect,
 }: {
   assets: Asset[];
   benchAssets: Asset[];
   heroTag: string | null;
-  useGlb: boolean;
   selectedTag: string | null;
   onSelect: (tag: string | null) => void;
 }) {
@@ -424,7 +329,6 @@ function Scene({
           key={asset.id}
           asset={asset}
           hero={asset.tag === heroTag}
-          useGlb={useGlb}
           selected={asset.tag === selectedTag}
           anySelected={selectedTag !== null}
           onSelect={onSelect}
@@ -507,7 +411,6 @@ function DetailCard({ asset, onClose }: { asset: Asset; onClose: () => void }) {
 
 export default function IsoPlant({ assets }: { assets: Asset[] }) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [glbOk, setGlbOk] = useState(false);
 
   // Motor "heroi": maior potencia (empate -> primeiro). Recebe o modelo real.
   const placed = useMemo(
@@ -526,17 +429,6 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
     return pool.reduce((best, a) => ((a.power_kw ?? 0) > (best.power_kw ?? 0) ? a : best)).tag;
   }, [otherAssets]);
 
-  // Detecta o .glb sem quebrar a cena quando ausente (HEAD honesto).
-  useEffect(() => {
-    let alive = true;
-    fetch(MOTOR_GLB, { method: "HEAD" })
-      .then((r) => alive && setGlbOk(r.ok && (r.headers.get("content-type")?.includes("model") ?? true)))
-      .catch(() => alive && setGlbOk(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   const selected = placed.find((a) => a.tag === selectedTag) ?? null;
 
   return (
@@ -550,7 +442,6 @@ export default function IsoPlant({ assets }: { assets: Asset[] }) {
           assets={otherAssets}
           benchAssets={benchAssets}
           heroTag={heroTag}
-          useGlb={glbOk}
           selectedTag={selectedTag}
           onSelect={setSelectedTag}
         />

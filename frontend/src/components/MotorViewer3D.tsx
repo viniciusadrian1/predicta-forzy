@@ -20,18 +20,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
+import { BODY_LENGTH, BODY_RADIUS, MotorMesh } from "@/components/three/MotorMesh";
 import { getLatest } from "@/lib/api";
 
-// --- Geometria do motor genérico (unidades Three.js ~ metros) ---
-const BODY_RADIUS = 0.38;
-const BODY_LENGTH = 1.2;
-const SHAFT_RADIUS = 0.06;
-const SHAFT_OVERHANG = 0.32;
-const FIN_COUNT = 9;
-const FIN_TUBE_RADIUS = 0.025;
-const TERMINAL_BOX_W = 0.3;
-const TERMINAL_BOX_H = 0.18;
-const TERMINAL_BOX_D = 0.22;
 
 const STATUS_COLOR: Record<string, string> = {
   ok: "#22c55e",
@@ -90,79 +81,6 @@ function markerTo3D(marker: MotorMarker): [number, number, number] {
   const angle = marker.pos3d_z * Math.PI * 2 - Math.PI / 2; // -π/2 = topo
   const r = BODY_RADIUS + 0.06;
   return [x, Math.sin(angle) * r, Math.cos(angle) * r];
-}
-
-// --- Peças do motor ---
-function MotorBody() {
-  return (
-    <mesh rotation={[0, 0, Math.PI / 2]} receiveShadow castShadow>
-      <cylinderGeometry args={[BODY_RADIUS, BODY_RADIUS, BODY_LENGTH, 48]} />
-      <meshStandardMaterial color="#7c8ba1" roughness={0.45} metalness={0.35} />
-    </mesh>
-  );
-}
-
-function MotorShaft() {
-  return (
-    <>
-      <mesh
-        position={[-(BODY_LENGTH / 2 + SHAFT_OVERHANG / 2), 0, 0]}
-        rotation={[0, 0, Math.PI / 2]}
-        castShadow
-      >
-        <cylinderGeometry args={[SHAFT_RADIUS, SHAFT_RADIUS, SHAFT_OVERHANG, 24]} />
-        <meshStandardMaterial color="#cbd5e1" roughness={0.28} metalness={0.5} />
-      </mesh>
-      <mesh
-        position={[BODY_LENGTH / 2 + SHAFT_OVERHANG / 4, 0, 0]}
-        rotation={[0, 0, Math.PI / 2]}
-        castShadow
-      >
-        <cylinderGeometry args={[SHAFT_RADIUS, SHAFT_RADIUS, SHAFT_OVERHANG / 2, 24]} />
-        <meshStandardMaterial color="#cbd5e1" roughness={0.28} metalness={0.5} />
-      </mesh>
-    </>
-  );
-}
-
-function CoolingFins() {
-  return (
-    <>
-      {Array.from({ length: FIN_COUNT }).map((_, i) => {
-        const x = -BODY_LENGTH / 2 + (i / (FIN_COUNT - 1)) * BODY_LENGTH;
-        return (
-          <mesh key={i} position={[x, 0, 0]} castShadow>
-            <torusGeometry args={[BODY_RADIUS + 0.015, FIN_TUBE_RADIUS, 12, 48]} />
-            <meshStandardMaterial color="#5c6a80" roughness={0.5} metalness={0.35} />
-          </mesh>
-        );
-      })}
-    </>
-  );
-}
-
-function TerminalBox() {
-  return (
-    <mesh position={[0, BODY_RADIUS + TERMINAL_BOX_H / 2, 0]} castShadow>
-      <boxGeometry args={[TERMINAL_BOX_W, TERMINAL_BOX_H, TERMINAL_BOX_D]} />
-      <meshStandardMaterial color="#5c6a80" roughness={0.45} metalness={0.35} />
-    </mesh>
-  );
-}
-
-function EndCap({ side }: { side: "front" | "back" }) {
-  const x = side === "front" ? -BODY_LENGTH / 2 : BODY_LENGTH / 2;
-  return (
-    <mesh position={[x, 0, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
-      <circleGeometry args={[BODY_RADIUS, 48]} />
-      <meshStandardMaterial
-        color="#68788f"
-        roughness={0.45}
-        metalness={0.35}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
-  );
 }
 
 // --- Marcador de ponto de medição ---
@@ -350,12 +268,7 @@ function MotorScene({
       <hemisphereLight args={["#dbeafe", "#0f172a", 0.5]} />
 
       <group>
-        <MotorBody />
-        <CoolingFins />
-        <MotorShaft />
-        <TerminalBox />
-        <EndCap side="front" />
-        <EndCap side="back" />
+        <MotorMesh />
       </group>
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -BODY_RADIUS - 0.02, 0]} receiveShadow>
