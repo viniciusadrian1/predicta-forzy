@@ -91,7 +91,37 @@ class TelemetryRepository:
         return [dict(row) for row in result.mappings().all()]
 
     async def latest(self, asset_tag: str) -> list[dict[str, Any]]:
-        """Ultima leitura de cada variavel do ativo (via window function)."""
+        """Ultima leitura de cada variavel do ativo.
+
+        No PostgreSQL usa DISTINCT ON, que caminha o indice
+        (asset_tag, variable, time DESC) e para na primeira linha de cada
+        variavel. A versao anterior numerava com row_number() sobre TODAS as
+        linhas do ativo: 2.291 ms no motor de demonstracao (1,9 milhao de
+        leituras) contra 2,8 ms agora - e esta e a consulta que toda tela
+        refaz a cada poucos segundos.
+
+        Fora do PostgreSQL (o SQLite dos testes nao tem DISTINCT ON) cai na
+        window function, que da o mesmo resultado.
+        """
+        if self._session.bind.dialect.name == "postgresql":
+            stmt = (
+                select(
+                    telemetry_processed.c.time,
+                    telemetry_processed.c.variable,
+                    telemetry_processed.c.value,
+                    telemetry_processed.c.unit,
+                    telemetry_processed.c.quality,
+                )
+                .where(telemetry_processed.c.asset_tag == asset_tag)
+                .order_by(
+                    telemetry_processed.c.variable,
+                    telemetry_processed.c.time.desc(),
+                )
+                .distinct(telemetry_processed.c.variable)
+            )
+            result = await self._session.execute(stmt)
+            return [dict(row) for row in result.mappings().all()]
+
         ranked = (
             select(
                 telemetry_processed.c.time,

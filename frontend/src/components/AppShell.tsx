@@ -25,7 +25,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { VoltWidget } from "@/components/VoltWidget";
 import { getHierarchy } from "@/lib/api";
 import { hasRole, roleLabel, useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -313,8 +312,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {/* Volt: assistente flutuante disponivel em todas as telas. */}
-      <VoltWidget />
     </div>
   );
 }

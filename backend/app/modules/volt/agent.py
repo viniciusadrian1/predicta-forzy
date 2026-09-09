@@ -24,7 +24,13 @@ from app.modules.assets.repository import AssetRepository
 from app.modules.rag.llm import LlmClient
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.diagnosis import diagnose
-from app.modules.volt.lookup import ler_telemetria, resolver_ativo
+from app.modules.volt.lookup import (
+    ler_alertas,
+    ler_saude,
+    ler_telemetria,
+    limiares_de,
+    resolver_ativo,
+)
 from app.modules.volt.models import WorkOrder
 from app.modules.volt.repository import WorkOrderRepository
 from app.modules.volt.schemas import (
@@ -47,7 +53,9 @@ AGENT_SYSTEM_PROMPT = (
     "motores elétricos industriais. Você é UM assistente só e conversa em "
     "português do Brasil, de forma objetiva, técnica e prestativa.\n\n"
     "Você tem FERRAMENTAS para agir; use-as em vez de adivinhar:\n"
-    "- dados_do_ativo(tag): placa, status e leituras atuais de um motor.\n"
+    "- dados_do_ativo(tag): tudo que o sistema tem do motor agora — placa, "
+    "status, leituras dos sensores, saúde (baseline, anomalia, RUL, falha), "
+    "alertas e limiares do próprio motor.\n"
     "- buscar_manuais(consulta): trechos dos manuais e da base técnica (motores "
     "WEG, vibração ISO, manutenção, plataforma).\n"
     "- diagnosticar(tag, sintoma): falha provável a partir do sintoma + sensores.\n"
@@ -60,9 +68,13 @@ AGENT_SYSTEM_PROMPT = (
     "diagnóstico for confiável, ofereça abrir a OS.\n"
     "- Perguntas mistas → use mais de uma ferramenta e junte as respostas.\n\n"
     "Regras (guardrails):\n"
+    "- Perguntou sobre um ativo ou sobre QUALQUER métrica dele (vibração, "
+    "temperatura, corrente, vida útil, anomalia, alerta, limiar)? CHAME "
+    "dados_do_ativo ANTES de responder. Nunca diga que não tem o dado ou que "
+    "não tem acesso sem ter chamado a ferramenta neste turno.\n"
     "- Baseie-se nos dados retornados pelas ferramentas. NÃO invente valores, "
-    "normas ou números de peça; se não tiver o dado, diga o que sabe em termos "
-    "gerais e oriente onde confirmar.\n"
+    "normas ou números de peça — o que a ferramenta não trouxer, diga que o "
+    "sistema não mede e oriente onde confirmar.\n"
     "- Você apenas LÊ sensores; nunca aciona equipamento.\n"
     "- Se o ativo tiver MAIS DE UM ponto de medição (pontos_de_medicao com dois "
     "ou mais itens), relate TODOS por padrão, nomeando cada um — são partes do "
@@ -79,12 +91,16 @@ TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "dados_do_ativo",
-            "description": "Dados de placa, status e leituras atuais de um motor "
-            "(ativo). Use quando o usuario perguntar sobre um motor especifico. "
-            "Um equipamento pode ter VARIOS pontos de medicao (ex.: os dois "
-            "mancais de um conjunto motor-bomba): o campo pontos_de_medicao traz "
-            "cada sensor separado, e leituras_atuais traz o pior valor de cada "
-            "grandeza entre eles.",
+            "description": "TUDO que o sistema sabe de um motor AGORA: dados de "
+            "placa, status, leituras atuais dos sensores, SAUDE DO ATIVO "
+            "(baseline, deteccao de anomalia, RUL / vida util restante, "
+            "classificacao de falha), ALERTAS abertos e recentes, e os LIMIARES "
+            "de vibracao e temperatura do proprio motor. Use para QUALQUER "
+            "pergunta sobre um ativo ou sobre uma metrica dele. Um equipamento "
+            "pode ter VARIOS pontos de medicao (ex.: os dois mancais de um "
+            "conjunto motor-bomba): pontos_de_medicao traz cada sensor separado "
+            "com a sua propria saude e os seus proprios alertas, e "
+            "leituras_atuais traz o pior valor de cada grandeza entre eles.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -287,6 +303,30 @@ class VoltAgent:
         self._state.asset_name = asset.name or asset.tag
         # Um conjunto nao mede: as leituras vem dos seus pontos.
         telemetria = await ler_telemetria(self._telemetry, self._assets, asset)
+
+        # Cada ponto vai com o que a TELA de saude mostra. Sem isto o modelo
+        # so tinha placa e leitura instantanea, e respondia "nao tenho acesso"
+        # a qualquer pergunta sobre RUL, anomalia, alerta ou limiar - o dado
+        # nunca chegava ate ele.
+        pontos: list[dict[str, object]] = []
+        for ponto in telemetria.pontos:
+            do_ponto = (
+                await self._assets.get_asset_by_tag(ponto.tag)
+                if ponto.tag != asset.tag
+                else asset
+            )
+            pontos.append(
+                {
+                    "tag": ponto.tag,
+                    "nome": ponto.nome,
+                    "status": ponto.status,
+                    "leituras": ponto.leituras,
+                    "limiares": limiares_de(do_ponto) if do_ponto else None,
+                    "saude": await ler_saude(ponto.tag),
+                    "alertas": await ler_alertas(ponto.tag),
+                }
+            )
+
         return {
             "encontrado": True,
             "tag": asset.tag,
@@ -307,16 +347,8 @@ class VoltAgent:
             # do equipamento de quem perguntou.
             "leituras_atuais": telemetria.consolidado,
             "origem_das_leituras": telemetria.origem or None,
-            "pontos_de_medicao": [
-                {
-                    "tag": ponto.tag,
-                    "nome": ponto.nome,
-                    "status": ponto.status,
-                    "leituras": ponto.leituras,
-                }
-                for ponto in telemetria.pontos
-            ],
-            "total_de_pontos": len(telemetria.pontos),
+            "pontos_de_medicao": pontos,
+            "total_de_pontos": len(pontos),
         }
 
     async def _t_buscar_manuais(self, consulta: str) -> dict:

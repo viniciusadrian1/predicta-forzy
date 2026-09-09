@@ -21,6 +21,10 @@ _ASSET = SimpleNamespace(
     nominal_rpm=1755,
     insulation_class="F",
     ip_rating="IP55",
+    vib_warning=None,
+    vib_critical=None,
+    temp_warning=None,
+    temp_critical=None,
 )
 
 
@@ -121,18 +125,30 @@ _CONJUNTO = SimpleNamespace(
     parent_tag=None, manufacturer="Forzy", model="Bancada R11", power_kw=None,
     voltage_v=220, nominal_current_a=None, nominal_rpm=None,
     insulation_class=None, ip_rating=None,
+    vib_warning=None,
+    vib_critical=None,
+    temp_warning=None,
+    temp_critical=None,
 )
 _MANCAL_A = SimpleNamespace(
     tag="MTR-F01", name="Bancada de teste — mancal lado bomba", status="ok",
     parent_tag="MTR-F00", manufacturer="Forzy", model="Bancada R11", power_kw=None,
     voltage_v=220, nominal_current_a=None, nominal_rpm=None,
     insulation_class=None, ip_rating=None,
+    vib_warning=None,
+    vib_critical=None,
+    temp_warning=None,
+    temp_critical=None,
 )
 _MANCAL_B = SimpleNamespace(
     tag="MTR-F02", name="Bancada de teste — mancal lado motor", status="warning",
     parent_tag="MTR-F00", manufacturer="Forzy", model="Bancada R11", power_kw=None,
     voltage_v=220, nominal_current_a=None, nominal_rpm=None,
     insulation_class=None, ip_rating=None,
+    vib_warning=None,
+    vib_critical=None,
+    temp_warning=None,
+    temp_critical=None,
 )
 
 
@@ -275,3 +291,67 @@ async def test_ativo_de_ponto_unico_tambem_lista_seu_ponto():
     assert dados["total_de_pontos"] == 1
     assert dados["pontos_de_medicao"][0]["tag"] == "MTR-001"
     assert dados["origem_das_leituras"] is None  # nao ha fan-out aqui
+
+
+async def test_ferramenta_entrega_saude_limiares_e_alertas():
+    """O que a tela de saude mostra precisa chegar ao modelo.
+
+    A ferramenta so devolvia placa + leitura instantanea. Perguntado sobre RUL,
+    anomalia, alerta ou limiar, o modelo respondia "nao tenho acesso" — porque
+    de fato nao tinha: o dado nunca entrava no contexto dele.
+    """
+    agente = VoltAgent(
+        assets=_AssetsConjunto(),
+        telemetry=_TelemetriaDosPontos(),
+        work_orders=_Orders(),
+        settings=Settings(),
+        role="engineer",
+        llm=_FakeLlm([]),
+    )
+    agente._state = VoltStateModel(
+        step="aguardando_ativo", asset_tag=None, asset_name=None,
+        symptom=None, not_found_attempts=0,
+    )
+    dados = await agente._t_dados_do_ativo("MTR-F00")
+
+    for ponto in dados["pontos_de_medicao"]:
+        # As chaves precisam existir mesmo quando o ML esta indisponivel:
+        # o modelo tem que ver que o campo EXISTE e esta vazio, e nao concluir
+        # que a metrica nao faz parte do sistema.
+        assert "saude" in ponto
+        assert "alertas" in ponto
+        assert "limiares" in ponto
+        # Limiar sempre resolve: do proprio ativo ou o fallback ISO.
+        assert ponto["limiares"]["vib_critical"] > 0
+        assert ponto["limiares"]["temp_critical"] > 0
+
+
+def test_ferramenta_anuncia_as_metricas_que_devolve():
+    """Um modelo so chama o que entende que existe.
+
+    A descricao dizia apenas "placa, status e leituras atuais"; nada de RUL,
+    anomalia, alerta ou limiar. Enumerar o que vem no payload e o que faz a
+    ferramenta ser escolhida para uma pergunta de metrica.
+    """
+    from app.modules.volt.agent import TOOLS
+
+    descricao = next(
+        t["function"]["description"]
+        for t in TOOLS
+        if t["function"]["name"] == "dados_do_ativo"
+    ).lower()
+    for termo in ("rul", "anomalia", "alerta", "limiar", "saude"):
+        assert termo in descricao, f"a descricao nao menciona {termo}"
+
+
+def test_prompt_manda_consultar_antes_de_dizer_que_nao_tem():
+    """A instrucao que produzia o "nao tenho acesso" tinha que sair.
+
+    "se nao tiver o dado, diga o que sabe em termos gerais" virava recusa. O
+    prompt agora exige chamar a ferramenta ANTES de negar.
+    """
+    from app.modules.volt.agent import AGENT_SYSTEM_PROMPT
+
+    prompt = AGENT_SYSTEM_PROMPT.lower()
+    assert "antes de responder" in prompt
+    assert "sem ter chamado a ferramenta" in prompt

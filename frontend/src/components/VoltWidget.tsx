@@ -16,8 +16,10 @@ export function VoltWidget() {
   const open = useVolt((state) => state.open);
   const openFor = useVolt((state) => state.openFor);
   const close = useVolt((state) => state.close);
-  // Monta o chat na 1a abertura e nunca desmonta: preserva a conversa ao
-  // fechar/reabrir (sem refazer a saudacao). Antes o `open &&` desmontava tudo.
+  // O chat monta na 1a abertura e sobrevive a navegacao (o widget agora vive
+  // no layout, acima do slot de pagina). Desmonta APENAS quando o usuario
+  // fecha o popup: fechar e o gesto de "encerrar o atendimento", e a proxima
+  // abertura comeca limpa. Trocar de menu nao encerra nada.
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
@@ -46,7 +48,12 @@ export function VoltWidget() {
             </div>
             <button
               type="button"
-              onClick={close}
+              onClick={() => {
+                close();
+                // Encerra a conversa: desmontar o chat descarta as bolhas e a
+                // saudacao recomeca na proxima abertura.
+                setMounted(false);
+              }}
               aria-label="Fechar assistente"
               className="text-slate-400 hover:text-slate-200"
             >
@@ -65,7 +72,14 @@ export function VoltWidget() {
 
       <button
         type="button"
-        onClick={() => (open ? close() : openFor())}
+        onClick={() => {
+          if (open) {
+            close();
+            setMounted(false);
+          } else {
+            openFor();
+          }
+        }}
         aria-label={open ? "Fechar o Volt" : "Abrir o Volt"}
         title="Falar com o Volt"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-lg transition-colors hover:bg-cyan-400"

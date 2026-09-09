@@ -14,6 +14,7 @@ diferente do que as telas mostram:
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from app.modules.assets.repository import AssetRepository
 from app.modules.assets.service import rollup_status
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.nlu import extract_asset_code
+
+logger = logging.getLogger("forzy.volt.lookup")
 
 # Variaveis em que "maior e pior": ao consolidar varios pontos de medicao num
 # unico conjunto, o pior valor e o que interessa para manutencao.
@@ -181,3 +184,115 @@ async def ler_telemetria(
                 )
             )
     return Telemetria(consolidado=consolidado, origem=origem, pontos=pontos)
+
+
+# ---------------------------- Saude e contexto ----------------------------
+# O agente so respondia placa + leitura instantanea. Metrica que a tela mostra
+# (baseline, anomalia, RUL, alerta, limiar) nunca entrava no contexto dele - e
+# ai o modelo dizia "nao tenho acesso", porque de fato nao tinha.
+
+
+async def ler_saude(asset_tag: str) -> dict[str, object]:
+    """Veredito dos modelos para um ponto de medicao, como na tela de saude.
+
+    `train_if_missing=False` de proposito: treinar dentro de um turno de chat
+    seguraria a resposta. Sem artefato pronto o campo sai `available: false`, e
+    o assistente diz que o modelo nao esta disponivel - o que e verdade.
+    Falha de ML nunca derruba o atendimento: devolve o que conseguiu.
+    """
+    from app.infra.db.base import timeseries_session_factory
+    from app.modules.ml.service import ml_service
+
+    saude: dict[str, object] = {}
+    try:
+        async with timeseries_session_factory() as sessao:
+            baseline = await ml_service.predict_baseline(
+                sessao, asset_tag, train_if_missing=False
+            )
+            anomalia = await ml_service.predict_anomaly(
+                sessao, asset_tag, train_if_missing=False
+            )
+            rul = await ml_service.estimate_rul(sessao, asset_tag)
+            # predict_fault NAO aceita train_if_missing (ml/service.py:475):
+            # passar o kwarg levantaria TypeError e derrubaria a ferramenta
+            # inteira, para qualquer ativo.
+            falha = await ml_service.predict_fault(sessao, asset_tag)
+    except Exception:  # pragma: no cover - ML fora do ar nao pode quebrar o chat
+        logger.warning("saude indisponivel para %s", asset_tag, exc_info=True)
+        return {}
+
+    if baseline.available:
+        saude["baseline"] = {
+            "decisao": baseline.decision,
+            "score": baseline.score,
+        }
+    if anomalia.available:
+        saude["anomalia"] = {
+            "detectada": anomalia.is_anomaly,
+            "erro_reconstrucao": anomalia.reconstruction_error,
+            "limiar_do_modelo": anomalia.threshold,
+        }
+    if rul.available:
+        saude["vida_util_restante"] = {
+            "dias": rul.rul_days,
+            "intervalo_dias": [rul.confidence_low_days, rul.confidence_high_days],
+            "tendencia_mm_s_por_dia": rul.trend_mm_s_per_day,
+            "observacao": rul.note,
+        }
+    if falha.available:
+        saude["classificacao_de_falha"] = {
+            "falha": falha.fault,
+            "confianca": falha.confidence,
+            # O schema ja marca o que e demonstracao; repassar para o modelo
+            # nao apresentar dado simulado como medicao de campo.
+            "simulado": falha.simulated,
+            "observacao": falha.note,
+        }
+    return saude
+
+
+async def ler_alertas(asset_tag: str, limite: int = 5) -> list[dict[str, object]]:
+    """Alertas do ativo: os abertos primeiro, como a tela mostra."""
+    from app.infra.db.base import catalog_session_factory
+    from app.modules.alerts.repository import AlertRepository
+
+    try:
+        async with catalog_session_factory() as sessao:
+            repo = AlertRepository(sessao)
+            abertos = await repo.list_alerts(
+                asset_tag=asset_tag, only_active=True, limit=limite
+            )
+            recentes = await repo.list_alerts(asset_tag=asset_tag, limit=limite)
+    except Exception:  # pragma: no cover
+        logger.warning("alertas indisponiveis para %s", asset_tag, exc_info=True)
+        return []
+
+    vistos: set[str] = set()
+    saida: list[dict[str, object]] = []
+    for alerta in [*abertos, *recentes]:
+        chave = str(alerta.id)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        saida.append(
+            {
+                "severidade": alerta.severity,
+                "tipo": alerta.alert_type,
+                "mensagem": alerta.message,
+                "aberto": not alerta.acknowledged,
+                "criado_em": alerta.created_at.isoformat() if alerta.created_at else None,
+                "reincidencias": getattr(alerta, "occurrence_count", 1),
+            }
+        )
+    return saida[: limite * 2]
+
+
+def limiares_de(asset: Asset) -> dict[str, float]:
+    """Limiares DO ATIVO, com o fallback ISO — os mesmos do avaliador.
+
+    Sem isto o assistente julgaria 6,4 mm/s pelo ISO global (4,5) sem ver que o
+    limite deste mancal e 6,92: diria "critico" onde o sistema diz "atencao".
+    """
+    from app.modules.alerts.evaluator import AlertsEvaluator
+
+    return AlertsEvaluator._thresholds(asset)
