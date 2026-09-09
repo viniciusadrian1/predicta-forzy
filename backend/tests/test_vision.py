@@ -220,3 +220,22 @@ def test_ip_tolera_ruido_de_ocr_e_normaliza_o_valor():
     assert {f.field: f.value for f in parse_nameplate_text("IP55", 0.8)}["ip_rating"] == "IP55"
     # ...e nao confunde um ano com grau de protecao.
     assert "ip_rating" not in {f.field for f in parse_nameplate_text("NBR 1955", 0.8)}
+
+
+def test_ruido_de_ocr_nao_vira_valor_de_campo():
+    """Lixo de OCR num campo de texto e PIOR que campo vazio.
+
+    A regex acha o rotulo ("FABRICANTE") e leva junto o que veio depois. Numa
+    foto ruim isso produziu 'cria A ico ce velo ENTS INDUSTRIAL S.A: IO' como
+    fabricante — e esse valor iria para a coluna do ativo. Quem revisa preenche
+    o que falta, mas confia no que ja veio preenchido.
+    """
+    ruim = "FABRICANTE cria A ico ce velo ENTS INDUSTRIAL S.A: IO\ne cc O proce +"
+    campos = {f.field for f in parse_generic_fields(ruim, 0.31)}
+    assert "manufacturer" not in campos
+
+    # E o gate nao pode ser cego: rotulo legitimo continua passando.
+    bom = "FABRICANTE: WEG MOTORES\nMODELO: W22 IR3"
+    extraidos = {f.field: f.value for f in parse_generic_fields(bom, 0.9)}
+    assert extraidos.get("manufacturer") == "WEG MOTORES"
+    assert extraidos.get("model") == "W22 IR3"

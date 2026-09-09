@@ -282,6 +282,38 @@ _COMPANY_HINT = re.compile(
 )
 
 
+# Campos de TEXTO livre (fabricante, modelo, serie) sao os que mais sofrem com
+# ruido: a regex acha o rotulo ("FABRICANTE") e leva junto o lixo que veio
+# depois. E o pior tipo de defeito neste sistema, porque o valor vai direto
+# para uma coluna do ativo - "cria A ico ce velo ENTS INDUSTRIAL S.A: IO" como
+# fabricante e pior do que campo vazio: um humano corrige o vazio, mas confia
+# no que ja veio preenchido.
+_CAMPOS_DE_TEXTO = frozenset({"manufacturer", "model", "serial_number"})
+
+
+def _parece_ruido(valor: str) -> bool:
+    """Heuristica de lixo de OCR para campo de texto curto.
+
+    Nome de fabricante ou modelo e curto e denso. Leitura ruim vira uma cadeia
+    longa de fragmentos de 1-2 letras, com muito simbolo solto no meio.
+    """
+    palavras = valor.split()
+    if not palavras:
+        return True
+    # Placa nao tem fabricante com 5+ palavras.
+    if len(palavras) > 4:
+        return True
+    # Muitos fragmentos minusculos = OCR picotando letra solta.
+    fragmentos = sum(1 for palavra in palavras if len(palavra) <= 2)
+    if fragmentos >= 2:
+        return True
+    # Densidade: pouca letra/digito no meio de simbolo e ruido.
+    uteis = sum(1 for c in valor if c.isalnum() or c.isspace())
+    if uteis / len(valor) < 0.75:
+        return True
+    return False
+
+
 def parse_generic_fields(text: str, base_confidence: float) -> list[ParsedField]:
     """Extrai campos genericos de placa (fabricante, modelo, serie, data).
 
@@ -295,6 +327,11 @@ def parse_generic_fields(text: str, base_confidence: float) -> list[ParsedField]
         match = pattern.search(text)
         if match:
             value = " ".join(match.group(1).split()).strip(" .,-")
+            if key in _CAMPOS_DE_TEXTO and _parece_ruido(value):
+                # Melhor campo ausente do que valor inventado: quem revisa
+                # preenche o que falta, mas nao desconfia do que ja veio.
+                logger.debug("valor descartado por ruido em %s: %r", key, value)
+                continue
             if value:
                 fields.append(ParsedField(key, label, value, round(base_confidence - 0.05, 2)))
                 seen.add(key)

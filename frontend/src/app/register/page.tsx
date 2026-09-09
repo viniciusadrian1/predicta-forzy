@@ -119,23 +119,58 @@ export default function RegisterPage() {
             </CardHeader>
             <CardContent>
               <p className={`mb-3 text-sm ${messageClass}`}>{result.message}</p>
-              {/* Sem o texto cru, "cobertura 0%" nao diz se o problema foi ler a
-                  imagem ou interpretar o que foi lido. Aberto por padrao quando
-                  nenhum campo saiu, que e justamente quando importa. */}
+              {/* Diagnostico da leitura. Fica DEPOIS dos campos e recolhido:
+                  e ferramenta de apoio para quando o OCR falha, nao o
+                  resultado. Antes vinha antes de tudo, aberto, com o texto cru
+                  ocupando a tela inteira. */}
+              {result.fields.length === 0 && (
+                <p className="mb-4 rounded-md border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-300">
+                  Nenhum campo foi reconhecido. Confira o diagnóstico da leitura
+                  abaixo e, se necessário, preencha o cadastro manualmente.
+                </p>
+              )}
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {result.fields.map((field) => (
+                  <div key={field.field} className="min-w-0">
+                    <dt className="text-xs text-slate-500">{field.label}</dt>
+                    <dd className="truncate text-sm text-slate-200" title={field.value ?? undefined}>
+                      {field.value ?? "--"}
+                      {/* Confianca baixa em amarelo: o rascunho vai para o
+                          cadastro, e um valor duvidoso precisa puxar o olho de
+                          quem revisa em vez de passar como cinza discreto. */}
+                      <span
+                        className={`ml-1 text-xs ${
+                          field.confidence < 0.5 ? "text-amber-400" : "text-slate-500"
+                        }`}
+                        title={
+                          field.confidence < 0.5
+                            ? "Confiança baixa — confira este campo na placa"
+                            : undefined
+                        }
+                      >
+                        {Math.round(field.confidence * 100)}%
+                      </span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+
+              {/* Diagnostico da leitura, recolhido. */}
               {result.raw_text !== undefined && (
-                <details
-                  open={result.fields.length === 0}
-                  className="mb-3 rounded-md border border-slate-800 bg-slate-950/60 p-3"
-                >
-                  <summary className="cursor-pointer text-xs text-slate-400">
-                    Texto lido pelo OCR ({result.raw_text.trim().length} caracteres)
+                <details className="group mt-5 border-t border-slate-800 pt-3">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-slate-500 transition-colors hover:text-slate-300">
+                    <span className="transition-transform group-open:rotate-90">›</span>
+                    Diagnóstico da leitura
+                    <span className="text-slate-600">
+                      · {result.raw_text.trim().length} caracteres lidos
+                    </span>
                   </summary>
                   {result.raw_text.trim() ? (
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-300">
+                    <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950/70 p-3 font-mono text-[11px] leading-relaxed text-slate-400">
                       {result.raw_text}
                     </pre>
                   ) : (
-                    <p className="mt-2 text-xs text-amber-400">
+                    <p className="mt-3 text-xs leading-relaxed text-slate-400">
                       O OCR não extraiu nenhum caractere desta imagem. Costuma ser
                       foco, ângulo muito inclinado, reflexo na placa metálica ou
                       texto pequeno demais no quadro — tente uma foto mais
@@ -144,19 +179,6 @@ export default function RegisterPage() {
                   )}
                 </details>
               )}
-              <dl className="grid gap-1.5 text-sm sm:grid-cols-2">
-                {result.fields.map((field) => (
-                  <div key={field.field} className="flex justify-between gap-3">
-                    <dt className="text-slate-400">{field.label}</dt>
-                    <dd className="text-slate-200">
-                      {field.value ?? "--"}
-                      <span className="ml-1 text-xs text-slate-500">
-                        {Math.round(field.confidence * 100)}%
-                      </span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
               {showOpenAsset && (
                 <Link
                   href={`/asset/${encodeURIComponent(resultTag)}`}
