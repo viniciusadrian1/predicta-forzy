@@ -68,16 +68,34 @@ def has_required_role(role: str, minimum: str) -> bool:
 def resolve_principal(authorization: str | None) -> Principal:
     """Resolve o ``Principal`` a partir do header ``Authorization: Bearer``.
 
-    Requisicoes sem token (ou com token invalido) sao tratadas como o
-    usuario anonimo, que recebe o papel ``viewer`` (somente leitura).
+    Duas situacoes DIFERENTES, que antes eram tratadas igual:
+
+    * **Sem credencial** - requisicao anonima. Vira ``viewer`` e enxerga o que
+      e publico. E o caso da planta aberta num telao, por exemplo.
+    * **Credencial apresentada e invalida/expirada** - erro 401. Antes isso
+      caia no mesmo rebaixamento silencioso, e o efeito era grave: o usuario
+      seguia "logado" como admin na tela (o papel vinha do localStorage) mas
+      valia viewer no servidor. As telas de Administracao respondiam 403
+      ("voce nao tem permissao", quando na verdade a sessao havia morrido) e
+      TODA escrita era negada - ack de alerta, cadastro, validacao. Como 401
+      nunca chegava, o handler do cliente que desloga e manda relogar jamais
+      disparava, e o unico jeito de sair era limpar o navegador na mao.
     """
     if not authorization or not authorization.lower().startswith("bearer "):
         return Principal(ANONYMOUS, DEFAULT_ROLE)
     token = authorization.split(" ", 1)[1].strip()
     try:
         payload = decode_token(token)
-    except jwt.PyJWTError:
-        return Principal(ANONYMOUS, DEFAULT_ROLE)
+    except jwt.PyJWTError as exc:
+        logger.info(
+            "credencial invalida ou expirada",
+            extra={"event": "auth_token_rejected"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessao expirada ou token invalido. Faca login novamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
     username = str(payload.get("sub", ANONYMOUS))
     role = str(payload.get("role", DEFAULT_ROLE))
     if role not in ROLE_HIERARCHY:

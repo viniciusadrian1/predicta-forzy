@@ -31,8 +31,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [hydrated, token, isPublic, router]);
 
-  // Valida a sessão persistida; token expirado (15 min) dispara o handler
-  // global de 401 em lib/api.ts, que desloga e redireciona com aviso.
+  // Valida a sessão persistida logo na entrada: um token vencido faz o
+  // backend responder 401, e o handler global de lib/api.ts desloga e manda
+  // relogar. Sem isso o usuário só descobria a sessão morta ao abrir uma tela
+  // protegida — e, antes do 401 existir, nem assim.
   useQuery({
     queryKey: ["me"],
     queryFn: getMe,

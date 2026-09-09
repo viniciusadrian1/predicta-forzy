@@ -1,6 +1,9 @@
 """Testes do controle de acesso baseado em papeis (RBAC)."""
 
 from app.core import rbac
+import pytest
+from fastapi import HTTPException
+
 from app.core.rbac import ROLE_HIERARCHY, has_required_role, resolve_principal
 from app.core.security import create_access_token
 from app.modules.governance.policy import ACCESS_RULES, CLASSIFICATION_LEVELS, DATA_INVENTORY
@@ -30,10 +33,31 @@ def test_resolve_principal_from_valid_token():
     assert principal.level == 2
 
 
-def test_resolve_principal_with_invalid_token_falls_back():
-    principal = resolve_principal("Bearer token-invalido")
-    assert principal.username == "anonymous"
-    assert principal.role == "viewer"
+def test_credencial_invalida_e_401_e_nao_rebaixamento_silencioso():
+    """Token apresentado e invalido => 401. NUNCA rebaixar para viewer.
+
+    O rebaixamento silencioso deixava o usuario "logado" como admin na tela e
+    valendo viewer no servidor: telas de Administracao davam 403 (mensagem de
+    permissao para uma sessao que na verdade morreu) e toda escrita era negada,
+    sem que o cliente jamais recebesse o 401 que dispara o relogin.
+    """
+    with pytest.raises(HTTPException) as exc:
+        resolve_principal("Bearer token-invalido")
+    assert exc.value.status_code == 401
+    assert exc.value.headers == {"WWW-Authenticate": "Bearer"}
+
+
+def test_token_expirado_tambem_e_401():
+    expirado = create_access_token("admin", "admin", expires_minutes=-1)
+    with pytest.raises(HTTPException) as exc:
+        resolve_principal(f"Bearer {expirado}")
+    assert exc.value.status_code == 401
+
+
+def test_sem_credencial_continua_anonimo_e_nao_401():
+    """Ausencia de credencial nao e erro: leitura publica segue funcionando."""
+    assert resolve_principal(None).role == "viewer"
+    assert resolve_principal("").role == "viewer"
 
 
 def test_unknown_role_is_downgraded_to_viewer():
@@ -160,3 +184,41 @@ async def test_asset_writes_require_role(client, monkeypatch):
     assert (
         await client.post("/api/v1/plants", json={"name": "P", "code": "P1"}, headers=op)
     ).status_code == 201
+
+
+async def test_auth_me_recusa_sessao_expirada(client):
+    """/auth/me e como o cliente descobre que a sessao morreu: precisa dar 401.
+
+    Enquanto ele respondia 200 {"username": "anonymous"}, o guarda de sessao do
+    frontend recebia "tudo certo" e mantinha o usuario numa sessao morta -
+    exibindo controles de admin que o servidor ja recusava.
+    """
+    expirado = create_access_token("admin", "admin", expires_minutes=-1)
+    resp = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {expirado}"}
+    )
+    assert resp.status_code == 401
+    assert resp.headers.get("WWW-Authenticate") == "Bearer"
+
+
+async def test_auth_me_sem_token_nao_quebra(client):
+    """Sem credencial nao e erro de autenticacao: segue anonimo."""
+    resp = await client.get("/api/v1/auth/me")
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "anonymous"
+
+
+async def test_escrita_com_token_expirado_manda_relogar_e_nao_nega_permissao(client):
+    """Escrita com sessao morta deve dizer 401 (relogue), nunca 403 (sem permissao).
+
+    O 403 mentia para o usuario: ele era admin, a sessao e que havia expirado -
+    e como 401 nunca chegava, o cliente nao tinha como saber que precisava
+    relogar. Era esse o "fico impedido de mexer em qualquer coisa".
+    """
+    expirado = create_access_token("admin", "admin", expires_minutes=-1)
+    resp = await client.post(
+        "/api/v1/assets",
+        json={"tag": "ZZZ-EXPIRADO", "asset_type": "motor"},
+        headers={"Authorization": f"Bearer {expirado}"},
+    )
+    assert resp.status_code == 401

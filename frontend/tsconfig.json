@@ -20,5 +20,7 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "tests", "playwright.config.ts"]
+  // `scripts` roda no node com --experimental-strip-types (importa com
+  // extensao .ts, que o bundler do Next rejeita); nao e codigo da app.
+  "exclude": ["node_modules", "tests", "playwright.config.ts", "scripts"]
 }

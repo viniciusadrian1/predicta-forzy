@@ -26,7 +26,7 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
 
-  // ?expired=1 vem do handler global de 401 (sessão de 15 min vencida).
+  // ?expired=1 vem do handler global de 401 em lib/api.ts.
   // Lido via window para não exigir <Suspense> de useSearchParams no build.
   useEffect(() => {
     setExpired(new URLSearchParams(window.location.search).has("expired"));
