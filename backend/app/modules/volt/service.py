@@ -26,7 +26,7 @@ from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.agent import VoltAgent
 from app.modules.volt.diagnosis import diagnose
 from app.modules.volt.models import WorkOrder
-from app.modules.volt.lookup import ler_telemetria, resolver_ativo
+from app.modules.volt.lookup import Telemetria, ler_telemetria, resolver_ativo
 from app.modules.volt.nlu import (
     detect_symptom,
     detect_urgency,
@@ -219,12 +219,15 @@ class VoltService:
         # Le os sensores do ativo (somente leitura) e diagnostica. Um conjunto
         # nao mede: as leituras vem dos seus pontos (ver volt/lookup.py).
         asset = await self._assets.get_asset_by_tag(state.asset_tag)
-        readings, origem = (
+        telemetria = (
             await ler_telemetria(self._telemetry, self._assets, asset)
             if asset is not None
-            else ({}, {})
+            else Telemetria()
         )
-        readings = {variavel: float(valor) for variavel, valor in readings.items()}
+        origem = telemetria.origem
+        readings = {
+            variavel: float(valor) for variavel, valor in telemetria.consolidado.items()
+        }
         dx = diagnose(symptom, readings)
         complementos = [_origem_txt(origem)] if origem else []
         # O que os MODELOS dizem, com os mesmos numeros da tela "Saude do ativo".
@@ -388,12 +391,17 @@ class VoltService:
         specs_txt = "; ".join(f"{key}: {value}" for key, value in specs if value)
         if specs_txt:
             lines.append(f"Dados de placa: {specs_txt}")
-        leituras, origem = await ler_telemetria(self._telemetry, self._assets, asset)
-        if leituras:
-            snapshot = "; ".join(f"{k}={v}" for k, v in leituras.items())
+        telemetria = await ler_telemetria(self._telemetry, self._assets, asset)
+        if telemetria.tem_multiplos_pontos:
+            # Um ponto por linha: o contexto do LLM precisa enxergar os DOIS
+            # mancais para poder responder pelos dois.
+            lines.append(f"Pontos de medição ({len(telemetria.pontos)}):")
+            for ponto in telemetria.pontos:
+                valores = "; ".join(f"{k}={v}" for k, v in ponto.leituras.items())
+                lines.append(f"  - {ponto.nome} ({ponto.tag}): {valores}")
+        elif telemetria.consolidado:
+            snapshot = "; ".join(f"{k}={v}" for k, v in telemetria.consolidado.items())
             lines.append(f"Leituras atuais: {snapshot}")
-            if origem:
-                lines.append(_origem_txt(origem))
         return asset.tag, "\n".join(lines)
 
     async def _parecer_dos_modelos(self, tag: str) -> str:

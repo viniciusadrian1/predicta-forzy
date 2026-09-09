@@ -211,3 +211,67 @@ async def test_agente_diagnostica_conjunto_com_leituras_dos_mancais():
     resultado = await agente._t_diagnosticar("MTR-F00", "vibracao")
     assert "sem dados de sensor" not in resultado["falha"].lower()
     assert resultado["confianca"] >= 0.5  # 7.4 mm/s cai na faixa de atencao
+
+
+async def test_ferramenta_entrega_os_DOIS_sensores_do_conjunto():
+    """MTR-F00 tem dois mancais: a resposta nao pode sair por um so.
+
+    Antes, a ferramenta consolidava tudo no pior valor e o modelo recebia um
+    unico bloco de leituras — dava para responder por um sensor sem nem avisar
+    que existia outro. Agora o payload carrega cada ponto separado, e o
+    consolidado continua ali so para alimentar o diagnostico.
+    """
+    agente = VoltAgent(
+        assets=_AssetsConjunto(),
+        telemetry=_TelemetriaDosPontos(),
+        work_orders=_Orders(),
+        settings=Settings(),
+        role="engineer",
+        llm=_FakeLlm([]),
+    )
+    agente._state = VoltStateModel(
+        step="aguardando_ativo", asset_tag=None, asset_name=None,
+        symptom=None, not_found_attempts=0,
+    )
+    dados = await agente._t_dados_do_ativo("MTR-F00")
+
+    assert dados["total_de_pontos"] == 2
+    pontos = {p["tag"]: p for p in dados["pontos_de_medicao"]}
+    assert set(pontos) == {"MTR-F01", "MTR-F02"}
+
+    # Cada mancal com as SUAS leituras, nao a mistura dos dois.
+    assert pontos["MTR-F01"]["leituras"]["Vibracao_Velocidade_RMS"] == 2.0
+    assert pontos["MTR-F02"]["leituras"]["Vibracao_Velocidade_RMS"] == 7.4
+    assert pontos["MTR-F01"]["leituras"]["Temperatura"] == 41.0
+    assert pontos["MTR-F02"]["leituras"]["Temperatura"] == 38.0
+    # E cada um com o proprio status, que difere entre eles.
+    assert pontos["MTR-F01"]["status"] == "ok"
+    assert pontos["MTR-F02"]["status"] == "warning"
+
+    # O consolidado segue existindo para o diagnostico (pior de cada grandeza).
+    assert dados["leituras_atuais"]["Vibracao_Velocidade_RMS"] == 7.4
+    assert dados["leituras_atuais"]["Temperatura"] == 41.0
+
+
+async def test_ativo_de_ponto_unico_tambem_lista_seu_ponto():
+    """Ativo que mede a si proprio aparece como UM ponto, nao como zero.
+
+    Assim o modelo tem sempre a mesma forma de payload e nao precisa tratar
+    dois formatos diferentes.
+    """
+    agente = VoltAgent(
+        assets=_Assets(),
+        telemetry=_Telemetry(),
+        work_orders=_Orders(),
+        settings=Settings(),
+        role="engineer",
+        llm=_FakeLlm([]),
+    )
+    agente._state = VoltStateModel(
+        step="aguardando_ativo", asset_tag=None, asset_name=None,
+        symptom=None, not_found_attempts=0,
+    )
+    dados = await agente._t_dados_do_ativo("MTR-001")
+    assert dados["total_de_pontos"] == 1
+    assert dados["pontos_de_medicao"][0]["tag"] == "MTR-001"
+    assert dados["origem_das_leituras"] is None  # nao ha fan-out aqui

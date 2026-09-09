@@ -55,25 +55,35 @@ def _tokens(texto: str) -> set[str]:
 
 
 @dataclass
-class AssetSnapshot:
-    """O que o Volt sabe de um ativo: cadastro, status real e leituras reais."""
+class LeituraDePonto:
+    """As leituras de UM ponto de medicao, preservadas separadamente."""
 
-    asset: Asset
+    tag: str
+    nome: str
     status: str
-    readings: dict[str, float] = field(default_factory=dict)
-    # De qual ponto de medicao veio cada leitura (so quando ha fan-out).
+    leituras: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class Telemetria:
+    """O que o Volt le de um ativo.
+
+    Duas visoes da MESMA telemetria, porque servem a coisas diferentes:
+
+    * ``consolidado`` usa os nomes canonicos das variaveis e guarda o PIOR valor
+      de cada uma. E o que `diagnose` sabe interpretar.
+    * ``pontos`` preserva cada sensor separado. Um conjunto como o motor-bomba da
+      Forzy tem DOIS mancais, e responder so pelo pior (ou so por um) esconde
+      metade do equipamento de quem perguntou.
+    """
+
+    consolidado: dict[str, float] = field(default_factory=dict)
     origem: dict[str, str] = field(default_factory=dict)
+    pontos: list[LeituraDePonto] = field(default_factory=list)
 
     @property
-    def tag(self) -> str:
-        return self.asset.tag
-
-    def descricao_origem(self) -> str:
-        """Ex.: 'Vibracao do mancal lado motor' — de onde veio o pior valor."""
-        if not self.origem:
-            return ""
-        pontos = sorted(set(self.origem.values()))
-        return f"Leituras consolidadas de {len(pontos)} ponto(s): {', '.join(pontos)}."
+    def tem_multiplos_pontos(self) -> bool:
+        return len(self.pontos) > 1
 
 
 async def resolver_ativo(
@@ -126,26 +136,48 @@ async def _casar_por_nome(repo: AssetRepository, texto: str) -> Asset | None:
 
 async def ler_telemetria(
     telemetry: TelemetryRepository, repo: AssetRepository, asset: Asset
-) -> tuple[dict[str, float], dict[str, str]]:
+) -> Telemetria:
     """Leituras atuais do ativo; de seus PONTOS quando ele nao mede sozinho.
 
-    As chaves continuam sendo os nomes canonicos das variaveis - prefixa-las com
-    a TAG do ponto faria ``diagnose`` deixar de reconhecer as grandezas e
-    responder "os sensores nao confirmam o sintoma" com um mancal em 9 mm/s.
-    Consolidando varios pontos, vence o PIOR valor, e guardamos de onde veio.
+    Devolve SEMPRE os dois recortes: cada ponto separado (para a resposta poder
+    falar dos dois mancais) e o consolidado por variavel (para o diagnostico).
+
+    O consolidado mantem os nomes canonicos das variaveis - prefixa-los com a
+    TAG do ponto faria `diagnose` deixar de reconhecer as grandezas e responder
+    "os sensores nao confirmam o sintoma" com um mancal em 9 mm/s.
     """
     proprias = await telemetry.latest(asset.tag)
     if proprias:
-        return {linha["variable"]: linha["value"] for linha in proprias}, {}
+        leituras = {linha["variable"]: linha["value"] for linha in proprias}
+        return Telemetria(
+            consolidado=leituras,
+            pontos=[
+                LeituraDePonto(
+                    tag=asset.tag,
+                    nome=asset.name or asset.tag,
+                    status=asset.status,
+                    leituras=leituras,
+                )
+            ],
+        )
 
-    leituras: dict[str, float] = {}
+    consolidado: dict[str, float] = {}
     origem: dict[str, str] = {}
+    pontos: list[LeituraDePonto] = []
     for ponto in await repo.list_points(asset.tag):
         rotulo = ponto.name or ponto.tag
+        do_ponto: dict[str, float] = {}
         for linha in await telemetry.latest(ponto.tag):
             variavel, valor = linha["variable"], linha["value"]
-            atual = leituras.get(variavel)
+            do_ponto[variavel] = valor
+            atual = consolidado.get(variavel)
             if atual is None or (variavel in _PIOR_E_MAIOR and valor > atual):
-                leituras[variavel] = valor
+                consolidado[variavel] = valor
                 origem[variavel] = rotulo
-    return leituras, origem
+        if do_ponto:
+            pontos.append(
+                LeituraDePonto(
+                    tag=ponto.tag, nome=rotulo, status=ponto.status, leituras=do_ponto
+                )
+            )
+    return Telemetria(consolidado=consolidado, origem=origem, pontos=pontos)

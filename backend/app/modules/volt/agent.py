@@ -64,6 +64,10 @@ AGENT_SYSTEM_PROMPT = (
     "normas ou números de peça; se não tiver o dado, diga o que sabe em termos "
     "gerais e oriente onde confirmar.\n"
     "- Você apenas LÊ sensores; nunca aciona equipamento.\n"
+    "- Se o ativo tiver MAIS DE UM ponto de medição (pontos_de_medicao com dois "
+    "ou mais itens), relate TODOS por padrão, nomeando cada um — são partes do "
+    "MESMO equipamento, não motores diferentes. Nunca responda por apenas um "
+    "deles sem avisar; se o usuário quiser só um, ele pede.\n"
     "- A intervenção de manutenção é sempre decidida e validada por uma pessoa. "
     "Se abrir_ordem_servico recusar (ativo crítico, baixa confiança ou permissão), "
     "explique que o caso foi encaminhado a um humano.\n"
@@ -76,7 +80,11 @@ TOOLS: list[dict] = [
         "function": {
             "name": "dados_do_ativo",
             "description": "Dados de placa, status e leituras atuais de um motor "
-            "(ativo). Use quando o usuario perguntar sobre um motor especifico.",
+            "(ativo). Use quando o usuario perguntar sobre um motor especifico. "
+            "Um equipamento pode ter VARIOS pontos de medicao (ex.: os dois "
+            "mancais de um conjunto motor-bomba): o campo pontos_de_medicao traz "
+            "cada sensor separado, e leituras_atuais traz o pior valor de cada "
+            "grandeza entre eles.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -278,7 +286,7 @@ class VoltAgent:
         self._state.asset_tag = asset.tag
         self._state.asset_name = asset.name or asset.tag
         # Um conjunto nao mede: as leituras vem dos seus pontos.
-        leituras, origem = await ler_telemetria(self._telemetry, self._assets, asset)
+        telemetria = await ler_telemetria(self._telemetry, self._assets, asset)
         return {
             "encontrado": True,
             "tag": asset.tag,
@@ -294,8 +302,21 @@ class VoltAgent:
                 "classe_isolamento": asset.insulation_class,
                 "grau_protecao": asset.ip_rating,
             },
-            "leituras_atuais": leituras,
-            "origem_das_leituras": origem or None,
+            # SEMPRE os dois recortes. O conjunto da Forzy tem dois mancais:
+            # responder so pelo consolidado (ou so por um deles) esconde metade
+            # do equipamento de quem perguntou.
+            "leituras_atuais": telemetria.consolidado,
+            "origem_das_leituras": telemetria.origem or None,
+            "pontos_de_medicao": [
+                {
+                    "tag": ponto.tag,
+                    "nome": ponto.nome,
+                    "status": ponto.status,
+                    "leituras": ponto.leituras,
+                }
+                for ponto in telemetria.pontos
+            ],
+            "total_de_pontos": len(telemetria.pontos),
         }
 
     async def _t_buscar_manuais(self, consulta: str) -> dict:
@@ -329,8 +350,10 @@ class VoltAgent:
         self._state.asset_tag = asset.tag
         self._state.asset_name = asset.name or asset.tag
         self._state.symptom = sintoma
-        leituras, _origem = await ler_telemetria(self._telemetry, self._assets, asset)
-        readings = {variavel: float(valor) for variavel, valor in leituras.items()}
+        telemetria = await ler_telemetria(self._telemetry, self._assets, asset)
+        readings = {
+            variavel: float(valor) for variavel, valor in telemetria.consolidado.items()
+        }
         dx = diagnose(sintoma, readings)
         detailed = has_required_role(self._role, "engineer")
         self._diagnosis = DiagnosisOut(
