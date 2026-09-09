@@ -50,15 +50,24 @@ class AssetService:
         self._repo = repository
 
     # ------------------------- Assets -------------------------
-    async def list_assets(self) -> list[Asset]:
-        assets = await self._repo.list_assets()
+    async def _with_rollup(self, assets: list[Asset]) -> list[Asset]:
+        """Aplica o status consolidado numa lista JA lida.
+
+        Os pontos vem do catalogo inteiro, nao da lista recebida: uma busca
+        filtrada ("MTR-F") pode trazer o conjunto sem trazer os mancais, e ai o
+        rollup calculado so sobre a lista devolveria "sem dados" - foi
+        exatamente o que aconteceu com search_assets.
+        """
         by_parent: dict[str, list[Asset]] = {}
-        for asset in assets:
-            if asset.parent_tag:
-                by_parent.setdefault(asset.parent_tag, []).append(asset)
+        for point in await self._repo.list_points():
+            if point.parent_tag:
+                by_parent.setdefault(point.parent_tag, []).append(point)
         for asset in assets:
             asset.status = rollup_status(asset, by_parent.get(asset.tag, []))
         return assets
+
+    async def list_assets(self) -> list[Asset]:
+        return await self._with_rollup(await self._repo.list_assets())
 
     async def _load_asset(self, tag: str) -> Asset:
         """A ENTIDADE crua, para os caminhos de escrita.
@@ -145,7 +154,9 @@ class AssetService:
         asset_type: str | None,
         plant_id: UUID | None,
     ) -> list[Asset]:
-        return await self._repo.search_assets(search, status, asset_type, plant_id)
+        return await self._with_rollup(
+            await self._repo.search_assets(search, status, asset_type, plant_id)
+        )
 
     async def get_hierarchy(self) -> list[Plant]:
         plants = await self._repo.list_hierarchy()

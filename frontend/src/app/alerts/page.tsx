@@ -42,16 +42,22 @@ function AlertsPageInner() {
   const tagFilter = searchParams.get("tag") ?? "";
 
   const [severity, setSeverity] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
+  // Tres visoes. Antes era so "apenas ativos" ligado por padrao: ao reconhecer
+  // um alerta ele deixava de ser ativo e o card SUMIA da tela no mesmo segundo,
+  // levando junto o comentario recem-escrito. "Reconhecidos" e onde esse
+  // historico fica, separado do fechamento automatico da maquina.
+  const [view, setView] = useState<"ativos" | "reconhecidos" | "todos">("ativos");
   const [comments, setComments] = useState<Record<string, string>>({});
 
   const alertsQuery = useQuery({
-    queryKey: ["alerts", "page", severity, onlyActive, tagFilter],
+    queryKey: ["alerts", "page", severity, view, tagFilter],
     queryFn: () =>
       getAlerts({
         severity: severity || undefined,
-        onlyActive,
+        onlyActive: view === "ativos",
+        acknowledgedBy: view === "reconhecidos" ? "humano" : undefined,
         tag: tagFilter || undefined,
+        limit: view === "ativos" ? undefined : 500,
       }),
     refetchInterval: 8000,
   });
@@ -97,14 +103,28 @@ function AlertsPageInner() {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={onlyActive}
-              onChange={(event) => setOnlyActive(event.target.checked)}
-            />
-            Apenas ativos
-          </label>
+          <div className="inline-flex overflow-hidden rounded-md border border-slate-700">
+            {(
+              [
+                ["ativos", "Ativos"],
+                ["reconhecidos", "Reconhecidos"],
+                ["todos", "Todos"],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => setView(valor)}
+                className={`px-3 py-1.5 text-sm transition-colors ${
+                  view === valor
+                    ? "bg-cyan-500 font-medium text-slate-950"
+                    : "text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
           {tagFilter && (
             <Link
               href="/alerts"
@@ -162,10 +182,36 @@ function AlertsPageInner() {
               <p className="mt-2 text-sm text-slate-200">{alert.message}</p>
 
               {alert.acknowledged ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  Reconhecido por {alert.ack_by}
-                  {alert.ack_comment ? ` — "${alert.ack_comment}"` : ""}
-                </p>
+                <div className="mt-2 rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2">
+                  {alert.ack_by === "auto" ? (
+                    <p className="text-xs text-slate-500">
+                      Encerrado automaticamente — a condição normalizou
+                      {alert.ack_at
+                        ? ` em ${new Date(alert.ack_at).toLocaleString("pt-BR")}`
+                        : ""}
+                      .
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-400">
+                        <span className="font-medium text-slate-300">
+                          Reconhecido por {alert.ack_by ?? "—"}
+                        </span>
+                        {/* ack_at existia no modelo, na API e no tipo, mas nunca
+                            aparecia: dos tres dados pedidos, a hora do
+                            reconhecimento simplesmente nao era exibida. */}
+                        {alert.ack_at
+                          ? ` · ${new Date(alert.ack_at).toLocaleString("pt-BR")}`
+                          : ""}
+                      </p>
+                      {alert.ack_comment && (
+                        <p className="mt-1 text-sm text-slate-200">
+                          &ldquo;{alert.ack_comment}&rdquo;
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               ) : (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Input

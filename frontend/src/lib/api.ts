@@ -241,12 +241,21 @@ export function telemetryCsvUrl(tag: string, variable?: string): string {
 
 // --- Alertas ---
 export async function getAlerts(
-  params: { tag?: string; severity?: string; onlyActive?: boolean } = {},
+  params: {
+    tag?: string;
+    severity?: string;
+    onlyActive?: boolean;
+    /** "humano": só os reconhecidos por pessoa, sem o fechamento automático. */
+    acknowledgedBy?: "humano";
+    limit?: number;
+  } = {},
 ): Promise<Alert[]> {
   const query = new URLSearchParams();
   if (params.tag) query.set("tag", params.tag);
   if (params.severity) query.set("severity", params.severity);
   if (params.onlyActive) query.set("only_active", "true");
+  if (params.acknowledgedBy) query.set("acknowledged_by", params.acknowledgedBy);
+  if (params.limit) query.set("limit", String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return parse<Alert[]>(await fetch(apiUrl(`/alerts${suffix}`), { cache: "no-store" }));
 }

@@ -260,3 +260,54 @@ async def test_pedido_explicito_de_humano(client):
     b2 = r2.json()
     assert b2["handoff"] is not None
     assert "solicitação" in b2["handoff"]["reason"].lower()
+
+
+# --- O Volt enxergando o mesmo sistema que as telas --------------------------
+
+
+def test_fanout_usa_nomes_canonicos_de_variavel():
+    """Consolidar pontos NAO pode prefixar a chave com a TAG do ponto.
+
+    Com chaves tipo "MTR-F01/Vibracao_Velocidade_RMS", `diagnose` deixa de
+    reconhecer as grandezas, o dicionario deixa de ser vazio e a resposta vira
+    "os sensores nao confirmam o sintoma" - com o mancal em 9 mm/s. Mentir e
+    pior do que dizer "sem dados".
+    """
+    from app.modules.volt.diagnosis import diagnose
+    from app.modules.volt.lookup import _PIOR_E_MAIOR
+
+    canonicas = {"Vibracao_Velocidade_RMS": 9.0, "Vibracao_Aceleracao_RMS": 1.2}
+    assert all(v in _PIOR_E_MAIOR for v in canonicas)
+    dx = diagnose("vibracao", canonicas)
+    assert "não confirmam" not in dx.evidence
+    assert dx.confidence >= 0.5
+
+    prefixadas = {"MTR-F01/Vibracao_Velocidade_RMS": 9.0}
+    mentira = diagnose("vibracao", prefixadas)
+    assert "não confirmam" in mentira.evidence  # o que aconteceria com prefixo
+
+
+def test_consolidacao_de_pontos_pega_o_pior_valor():
+    """Num conjunto, vence a leitura do ponto em pior estado."""
+    from app.modules.volt.lookup import _PIOR_E_MAIOR
+
+    leituras: dict[str, float] = {}
+    origem: dict[str, str] = {}
+    for rotulo, valor in (("mancal lado bomba", 2.0), ("mancal lado motor", 7.5)):
+        variavel = "Vibracao_Velocidade_RMS"
+        atual = leituras.get(variavel)
+        if atual is None or (variavel in _PIOR_E_MAIOR and valor > atual):
+            leituras[variavel] = valor
+            origem[variavel] = rotulo
+    assert leituras["Vibracao_Velocidade_RMS"] == 7.5
+    assert origem["Vibracao_Velocidade_RMS"] == "mancal lado motor"
+
+
+def test_reconhece_ativo_por_nome_e_recusa_palpite_ambiguo():
+    """"mancal do lado da bomba" tem que achar o ativo; "motor", nao."""
+    from app.modules.volt.lookup import _tokens
+
+    alvo = _tokens("MTR-F01 Bancada de teste — mancal lado bomba")
+    assert len(_tokens("o mancal do lado da bomba") & alvo) >= 2
+    # "motor" sozinho e stopword: nao pode virar 2 termos com nada.
+    assert len(_tokens("motor") & alvo) < 2

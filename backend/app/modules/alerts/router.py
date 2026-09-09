@@ -30,10 +30,15 @@ async def list_alerts(
     severity: str | None = Query(default=None),
     only_active: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
+    acknowledged_by: str | None = Query(
+        default=None,
+        description="'humano' devolve so os reconhecidos por pessoa, ordenados "
+        "pela hora do reconhecimento (exclui o fechamento automatico).",
+    ),
     service: AlertService = Depends(get_alert_service),
 ) -> list[Alert]:
     """Lista os alertas, com filtros opcionais por ativo e severidade."""
-    return await service.list_alerts(tag, severity, only_active, limit)
+    return await service.list_alerts(tag, severity, only_active, limit, acknowledged_by)
 
 
 @router.post(

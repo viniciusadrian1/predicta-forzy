@@ -180,3 +180,36 @@ async def test_atualizar_conjunto_nao_grava_status_derivado(client, catalog_sess
         ).scalar_one()
         assert row.name == "Conjunto W"
         assert row.status == "unknown", "o status derivado vazou para o banco"
+
+
+async def test_busca_filtrada_tambem_consolida_status(client, catalog_sessionmaker):
+    """Filtrar na tela de ativos nao pode devolver o conjunto como "sem dados".
+
+    O rollup vivia so em list_assets/get_asset/get_hierarchy; search_assets
+    entregava a linha crua, entao /assets?search=... mostrava "unknown" para o
+    mesmo ativo que a lista sem filtro mostrava operacional. E o filtro pode nem
+    trazer os pontos, entao o rollup precisa busca-los no catalogo.
+    """
+    from app.modules.assets.models import Asset
+
+    async with catalog_sessionmaker() as session:
+        session.add_all(
+            [
+                Asset(tag="BSC-01", asset_type="motor", status="unknown"),
+                Asset(
+                    tag="BSC-01-P1", asset_type="mancal",
+                    parent_tag="BSC-01", status="warning",
+                ),
+            ]
+        )
+        await session.commit()
+
+    # A busca por "BSC-01" traz o conjunto (e o ponto), mas o essencial e que o
+    # conjunto venha consolidado, e nao com o "unknown" cru da tabela.
+    body = (await client.get("/api/v1/assets?search=BSC-01")).json()
+    por_tag = {a["tag"]: a["status"] for a in body}
+    assert por_tag["BSC-01"] == "warning"
+
+    # E mesmo quando o filtro exclui os pontos, o conjunto continua consolidado.
+    body = (await client.get("/api/v1/assets?search=BSC-01&asset_type=motor")).json()
+    assert {a["tag"]: a["status"] for a in body}["BSC-01"] == "warning"

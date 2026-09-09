@@ -29,6 +29,7 @@ class AlertRepository:
         severity: str | None = None,
         only_active: bool = False,
         limit: int = 100,
+        acknowledged_by: str | None = None,
     ) -> list[Alert]:
         stmt = select(Alert)
         if asset_tag:
@@ -37,6 +38,16 @@ class AlertRepository:
             stmt = stmt.where(Alert.severity == severity)
         if only_active:
             stmt = stmt.where(Alert.acknowledged == False)  # noqa: E712
+        if acknowledged_by == "humano":
+            # Fechamento automatico grava ack_by="auto"; o historico de quem
+            # reconheceu de verdade some no meio dele se nao der para separar.
+            stmt = stmt.where(
+                Alert.acknowledged == True,  # noqa: E712
+                Alert.ack_by.is_not(None),
+                Alert.ack_by != "auto",
+            ).order_by(Alert.ack_at.desc()).limit(limit)
+            result = await self._session.execute(stmt)
+            return list(result.scalars().all())
         stmt = stmt.order_by(Alert.created_at.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

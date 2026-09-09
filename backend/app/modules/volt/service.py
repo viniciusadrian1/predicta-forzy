@@ -12,17 +12,21 @@ log de auditoria; o nivel de detalhe segue o papel do usuario (RBAC).
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import logging
 import re
 
 from app.core.config import Settings
 from app.core.rbac import has_required_role, rbac_enforced
+from app.infra.db.base import timeseries_session_factory
 from app.modules.assets.repository import AssetRepository
 from app.modules.rag.llm import LlmClient
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.agent import VoltAgent
 from app.modules.volt.diagnosis import diagnose
 from app.modules.volt.models import WorkOrder
+from app.modules.volt.lookup import ler_telemetria, resolver_ativo
 from app.modules.volt.nlu import (
     detect_symptom,
     detect_urgency,
@@ -40,6 +44,20 @@ from app.modules.volt.schemas import (
     VoltStateModel,
     WorkOrderOut,
 )
+
+_STATUS_TXT = {
+    "ok": "operacional",
+    "warning": "em atencao",
+    "critical": "critico",
+    "unknown": "sem leitura recente",
+}
+
+
+def _origem_txt(origem: dict[str, str]) -> str:
+    """Diz de qual ponto veio o pior valor — sem isso o numero fica sem dono."""
+    pontos = sorted(set(origem.values()))
+    return f"Valores do pior ponto de medicao ({', '.join(pontos)})."
+
 
 logger = logging.getLogger("forzy.volt")
 
@@ -147,14 +165,19 @@ class VoltService:
     # ------------------------------ etapas ------------------------------
     async def _handle_asset(self, state: VoltStateModel, message: str) -> VoltReply:
         code = extract_asset_code(message)
-        if code is None:
+        # Antes so o CODIGO chegava aqui; agora tentamos tambem por nome e
+        # localizacao ("o mancal do lado da bomba"), que e como o tecnico fala.
+        resolvido = await resolver_ativo(self._assets, message)
+        asset = resolvido[0] if resolvido else None
+
+        if asset is None and code is None:
             return VoltReply(
-                message="Não consegui identificar o código. Informe o código do "
-                "ativo, por favor. (Ex: MTR-2291)",
+                message="Não consegui identificar o ativo. Me passe o código "
+                "(ex: MTR-2291) ou descreva o equipamento — por exemplo, "
+                "\"o mancal do lado da bomba\".",
                 state=state,
             )
 
-        asset = await self._assets.get_asset_by_tag(code)
         if asset is None:
             state.not_found_attempts += 1
             # 2a falha na conferência -> handoff (rota de fuga humana).
@@ -193,10 +216,27 @@ class VoltService:
         state.symptom = _SYMPTOM_LABEL[symptom]
         assert state.asset_tag is not None
 
-        # Le os sensores do ativo (somente leitura) e diagnostica.
-        latest = await self._telemetry.latest(state.asset_tag)
-        readings = {row["variable"]: float(row["value"]) for row in latest}
+        # Le os sensores do ativo (somente leitura) e diagnostica. Um conjunto
+        # nao mede: as leituras vem dos seus pontos (ver volt/lookup.py).
+        asset = await self._assets.get_asset_by_tag(state.asset_tag)
+        readings, origem = (
+            await ler_telemetria(self._telemetry, self._assets, asset)
+            if asset is not None
+            else ({}, {})
+        )
+        readings = {variavel: float(valor) for variavel, valor in readings.items()}
         dx = diagnose(symptom, readings)
+        complementos = [_origem_txt(origem)] if origem else []
+        # O que os MODELOS dizem, com os mesmos numeros da tela "Saude do ativo".
+        # Entra como EVIDENCIA, nao como bonus de confianca: reforcar a confianca
+        # com o erro de reconstrucao empurraria o diagnostico para o limiar que
+        # dispara a abertura automatica de OS, com um score que nao tem escala
+        # fixa (ele so significa algo comparado ao limiar daquele ativo).
+        parecer = await self._parecer_dos_modelos(state.asset_tag)
+        if parecer:
+            complementos.append(parecer)
+        if complementos:
+            dx = replace(dx, evidence=" ".join([dx.evidence, *complementos]).strip())
 
         # Ativo crítico: sempre revisão humana, mesmo com alta confiança.
         if state.asset_tag in self._critical:
@@ -327,10 +367,14 @@ class VoltService:
         tag = state.asset_tag or extract_asset_code(message)
         if not tag:
             return None, None
-        asset = await self._assets.get_asset_by_tag(tag)
-        if asset is None:
+        resolvido = await resolver_ativo(self._assets, message if not state.asset_tag else tag)
+        if resolvido is None:
             return None, None
+        asset, status = resolvido
         lines = [f"Ativo: {asset.tag} — {asset.name}" if asset.name else f"Ativo: {asset.tag}"]
+        # O contexto nao mandava status nenhum; agora manda o CONSOLIDADO, o
+        # mesmo que as telas exibem.
+        lines.append(f"Status: {_STATUS_TXT.get(status, status)}")
         specs = [
             ("Fabricante", asset.manufacturer),
             ("Modelo", asset.model),
@@ -344,11 +388,45 @@ class VoltService:
         specs_txt = "; ".join(f"{key}: {value}" for key, value in specs if value)
         if specs_txt:
             lines.append(f"Dados de placa: {specs_txt}")
-        latest = await self._telemetry.latest(asset.tag)
-        if latest:
-            snapshot = "; ".join(f"{row['variable']}={row['value']}" for row in latest)
+        leituras, origem = await ler_telemetria(self._telemetry, self._assets, asset)
+        if leituras:
+            snapshot = "; ".join(f"{k}={v}" for k, v in leituras.items())
             lines.append(f"Leituras atuais: {snapshot}")
+            if origem:
+                lines.append(_origem_txt(origem))
         return asset.tag, "\n".join(lines)
+
+    async def _parecer_dos_modelos(self, tag: str) -> str:
+        """Uma frase com o veredito dos modelos de ML sobre o ativo.
+
+        Sem isto, o Volt dizia "vibracao dentro do esperado" no mesmo instante em
+        que a tela de saude mostrava anomalia detectada - duas respostas para a
+        mesma pergunta. Falha de ML nunca derruba o atendimento: a frase some.
+        """
+        try:
+            from app.modules.ml.service import ml_service
+
+            async with timeseries_session_factory() as sessao:
+                anomalia = await ml_service.predict_anomaly(
+                    sessao, tag, train_if_missing=False
+                )
+                rul = await ml_service.estimate_rul(sessao, tag)
+        except Exception:  # pragma: no cover - ML indisponivel nao pode quebrar o chat
+            logger.warning("parecer de ML indisponivel (%s)", tag, exc_info=True)
+            return ""
+
+        partes: list[str] = []
+        if anomalia.available and anomalia.reconstruction_error is not None:
+            if anomalia.is_anomaly:
+                partes.append(
+                    f"O modelo de anomalia ACUSA desvio (erro {anomalia.reconstruction_error:.4f} "
+                    f"contra limiar {anomalia.threshold:.4f})."
+                )
+            else:
+                partes.append("O modelo de anomalia nao acusa desvio.")
+        if rul.available and rul.rul_days is not None:
+            partes.append(f"Vida util estimada em {rul.rul_days} dia(s).")
+        return " ".join(partes)
 
     # ------------------------------ apoio ------------------------------
     def _handoff(

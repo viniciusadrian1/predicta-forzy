@@ -24,8 +24,11 @@ class AlertService:
         severity: str | None = None,
         only_active: bool = False,
         limit: int = 100,
+        acknowledged_by: str | None = None,
     ) -> list[Alert]:
-        return await self._repo.list_alerts(asset_tag, severity, only_active, limit)
+        return await self._repo.list_alerts(
+            asset_tag, severity, only_active, limit, acknowledged_by
+        )
 
     async def acknowledge(self, alert_id: UUID, actor: str, comment: str | None = None) -> Alert:
         alert = await self._repo.get(alert_id)

@@ -259,3 +259,54 @@ def test_streak_distingue_modelo_normal_de_modelo_quebrado():
     # Estado apos falha de ML (a chave e removida) e no boot do processo.
     evaluator._anomaly_streak.pop("MTR-QUEBRADO", None)
     assert evaluator._anomaly_streak.get("MTR-QUEBRADO", -1) != 0  # -> mantem aberto
+
+
+async def test_historico_separa_reconhecimento_humano_do_fechamento_automatico(
+    client, catalog_sessionmaker
+):
+    """O comentario do tecnico precisa ficar achavel depois de reconhecer.
+
+    Antes a tela abria filtrada em "apenas ativos": ao reconhecer, o alerta
+    deixava de ser ativo e o card sumia no mesmo segundo, levando junto o
+    comentario. E, sem separar do fechamento automatico (ack_by="auto"), o
+    punhado de reconhecimentos humanos ficava afogado em centenas de linhas.
+    """
+    from app.modules.alerts.models import Alert
+
+    async with catalog_sessionmaker() as session:
+        session.add_all(
+            [
+                Alert(
+                    asset_tag="MTR-HIST", severity="WARNING",
+                    alert_type="THRESHOLD_APPROACHING", message="vibracao subindo",
+                ),
+                Alert(
+                    asset_tag="MTR-HIST", severity="INFO",
+                    alert_type="ANOMALY_DETECTED", message="fechado pela maquina",
+                    acknowledged=True, ack_by="auto",
+                    ack_comment="Fechado automaticamente: condicao normalizada.",
+                ),
+            ]
+        )
+        await session.commit()
+
+    aberto = [
+        a for a in (await client.get("/api/v1/alerts?tag=MTR-HIST&only_active=true")).json()
+    ]
+    assert len(aberto) == 1
+    alerta_id = aberto[0]["id"]
+
+    ack = await client.post(
+        f"/api/v1/alerts/{alerta_id}/ack", json={"comment": "Está tudo certo!"}
+    )
+    assert ack.status_code == 200
+
+    # O reconhecimento humano fica no historico, com autor, hora e comentario...
+    historico = (await client.get("/api/v1/alerts?acknowledged_by=humano")).json()
+    meu = next(a for a in historico if a["id"] == alerta_id)
+    assert meu["ack_comment"] == "Está tudo certo!"
+    assert meu["ack_by"] and meu["ack_by"] != "auto"
+    assert meu["ack_at"] is not None
+
+    # ...e o fechamento automatico NAO polui esse historico.
+    assert all(a["ack_by"] != "auto" for a in historico)
