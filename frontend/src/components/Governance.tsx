@@ -65,38 +65,40 @@ function fmt(value: string | null): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("pt-BR");
 }
 
+// Valores reais da coluna data_origin (assets/models.py): humano, importacao,
+// ia_gerado. Chave errada aqui fazia a tela mostrar o valor cru ("humano").
 const ORIGIN_LABEL: Record<string, string> = {
+  humano: "Cadastro manual",
   importacao: "Importação de base existente",
-  ocr: "Leitura de placa por OCR",
-  ia: "Extração por IA",
-  manual: "Cadastro manual",
+  ia_gerado: "Extração por IA (foto da placa)",
 };
 
 /** Metadados de rastreabilidade exigidos pela governanca (cadastro do ativo). */
 export function TraceabilityCard({ asset }: { asset: Asset }) {
   // Os campos de OCR so existem quando o ativo NASCEU de uma foto de placa.
-  // Num ativo importado nunca houve extracao, entao "—" seria lido como dado
-  // faltando; o correto e dizer que a etapa nao aconteceu. Score de confianca
-  // aqui e a cobertura do OCR na placa - nao tem relacao com o score do
-  // Isolation Forest em "Saude do ativo", que mede a vibracao de agora.
-  const fromOcr = asset.data_origin === "ocr" || asset.data_origin === "ia";
-  const semOcr = fromOcr ? "—" : "Não se aplica (sem leitura de placa)";
+  // "Score de confianca" aqui e a cobertura do OCR na placa — nada a ver com o
+  // score do Isolation Forest em "Saude do ativo", que mede a vibracao de agora.
+  const veioDeFoto = asset.data_origin === "ia_gerado";
 
-  const rows: Array<[string, string]> = [
+  const rows: Array<[string, string | null]> = [
     ["Origem do dado", ORIGIN_LABEL[asset.data_origin] ?? asset.data_origin],
-    [
-      "Data da foto/cadastro",
-      asset.registration_photo_at ? fmt(asset.registration_photo_at) : semOcr,
-    ],
-    ["Versão do OCR", asset.ocr_engine_version ?? semOcr],
-    [
-      "Score de confiança do OCR",
-      asset.ocr_confidence != null ? `${Math.round(asset.ocr_confidence * 100)}%` : semOcr,
-    ],
     ["Responsável pela validação", asset.validated_by ?? "Pendente"],
-    ["Fonte da imagem", asset.image_source ?? semOcr],
     ["Condição visual", asset.visual_condition ?? "Não avaliada"],
   ];
+  if (veioDeFoto) {
+    rows.push(
+      ["Data da foto", fmt(asset.registration_photo_at)],
+      ["Versão do OCR", asset.ocr_engine_version],
+      [
+        "Confiança do OCR",
+        asset.ocr_confidence != null
+          ? `${Math.round(asset.ocr_confidence * 100)}%`
+          : null,
+      ],
+      ["Fonte da imagem", asset.image_source],
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
@@ -104,22 +106,33 @@ export function TraceabilityCard({ asset }: { asset: Asset }) {
         <LineageBadge asset={asset} />
       </CardHeader>
       <CardContent>
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        {/* Rotulo ACIMA do valor. Em duas colunas com `justify-between`, o valor
+            de uma coluna encostava no rotulo da seguinte ("humano  Data da
+            foto/cadastro") e os textos longos quebravam em 3 linhas, deixando as
+            linhas de alturas diferentes. */}
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {rows.map(([label, value]) => (
-            <div key={label} className="flex justify-between gap-4">
-              <dt className="text-slate-400">{label}</dt>
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-slate-500">{label}</dt>
               <dd
-                className={
-                  value.startsWith("Não") || value === "Pendente" || value === "—"
-                    ? "text-right text-slate-500"
-                    : "text-right text-slate-200"
-                }
+                className={`truncate text-sm ${
+                  value ? "text-slate-200" : "text-slate-500"
+                }`}
+                title={value ?? undefined}
               >
-                {value}
+                {value ?? "Não informado"}
               </dd>
             </div>
           ))}
         </dl>
+        {!veioDeFoto && (
+          // Uma nota, em vez de repetir "Não se aplica (sem leitura de placa)"
+          // em quatro campos — era o que mais poluia o cartao.
+          <p className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-500">
+            Cadastro sem leitura de placa: não há versão de OCR, confiança de
+            extração nem imagem de origem para este ativo.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

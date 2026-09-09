@@ -356,16 +356,18 @@ export default function AssetPage({ params }: AssetPageProps) {
                   <CardTitle>Especificações do ativo</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  {/* Mesmo padrao do cartao de rastreabilidade ao lado: rotulo
+                      acima do valor. Com `justify-between` em duas colunas, um
+                      valor longo encostava no rotulo da coluna seguinte. */}
+                  <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                     {specs.map((row) => (
-                      <div key={row.label} className="flex justify-between gap-4">
-                        <dt className="text-slate-400">{row.label}</dt>
+                      <div key={row.label} className="min-w-0">
+                        <dt className="text-xs text-slate-500">{row.label}</dt>
                         <dd
-                          className={
-                            row.value == null
-                              ? "text-right text-slate-500"
-                              : "text-right text-slate-200"
-                          }
+                          className={`truncate text-sm ${
+                            row.value == null ? "text-slate-500" : "text-slate-200"
+                          }`}
+                          title={row.value != null ? String(row.value) : undefined}
                         >
                           {row.value ?? "Não informado"}
                         </dd>
