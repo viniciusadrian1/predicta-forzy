@@ -10,6 +10,7 @@ from app.modules.volt.schemas import VoltStateModel
 
 _ASSET = SimpleNamespace(
     tag="MTR-001",
+    parent_tag=None,
     name="Motor da bomba",
     status="ok",
     manufacturer="WEG",
@@ -26,6 +27,12 @@ _ASSET = SimpleNamespace(
 class _Assets:
     async def get_asset_by_tag(self, tag):
         return _ASSET if tag == "MTR-001" else None
+
+    async def list_points(self, parent_tag=None):
+        return []  # ativo simples: mede a si proprio, sem pontos filhos
+
+    async def list_assets(self):
+        return [_ASSET]
 
 
 class _Telemetry:
@@ -105,3 +112,102 @@ def test_llm_offline_without_key_disables_agent(no_key_provider):
     from app.modules.rag.llm import LlmClient
 
     assert LlmClient(provider=no_key_provider, api_key="", model="m").mode == "offline"
+
+
+# --- O agente enxergando o mesmo sistema que as telas ------------------------
+
+_CONJUNTO = SimpleNamespace(
+    tag="MTR-F00", name="Motor-bomba Forzy — bancada de teste", status="unknown",
+    parent_tag=None, manufacturer="Forzy", model="Bancada R11", power_kw=None,
+    voltage_v=220, nominal_current_a=None, nominal_rpm=None,
+    insulation_class=None, ip_rating=None,
+)
+_MANCAL_A = SimpleNamespace(
+    tag="MTR-F01", name="Bancada de teste — mancal lado bomba", status="ok",
+    parent_tag="MTR-F00", manufacturer="Forzy", model="Bancada R11", power_kw=None,
+    voltage_v=220, nominal_current_a=None, nominal_rpm=None,
+    insulation_class=None, ip_rating=None,
+)
+_MANCAL_B = SimpleNamespace(
+    tag="MTR-F02", name="Bancada de teste — mancal lado motor", status="warning",
+    parent_tag="MTR-F00", manufacturer="Forzy", model="Bancada R11", power_kw=None,
+    voltage_v=220, nominal_current_a=None, nominal_rpm=None,
+    insulation_class=None, ip_rating=None,
+)
+
+
+class _AssetsConjunto:
+    async def get_asset_by_tag(self, tag):
+        return {"MTR-F00": _CONJUNTO, "MTR-F01": _MANCAL_A, "MTR-F02": _MANCAL_B}.get(tag)
+
+    async def list_points(self, parent_tag=None):
+        pontos = [_MANCAL_A, _MANCAL_B]
+        return [p for p in pontos if parent_tag is None or p.parent_tag == parent_tag]
+
+    async def list_assets(self):
+        return [_CONJUNTO, _MANCAL_A, _MANCAL_B]
+
+
+class _TelemetriaDosPontos:
+    """So os MANCAIS medem; o conjunto nao tem linha nenhuma."""
+
+    async def latest(self, tag):
+        if tag == "MTR-F01":
+            return [{"variable": "Vibracao_Velocidade_RMS", "value": 2.0},
+                    {"variable": "Temperatura", "value": 41.0}]
+        if tag == "MTR-F02":
+            return [{"variable": "Vibracao_Velocidade_RMS", "value": 7.4},
+                    {"variable": "Temperatura", "value": 38.0}]
+        return []
+
+
+async def test_ferramenta_do_agente_devolve_status_e_leituras_do_conjunto():
+    """O que o LLM recebe precisa bater com o que as telas mostram.
+
+    Era esta ferramenta que alimentava a resposta "o status do motor é
+    'unknown' e não há leituras atuais disponíveis": ela lia o status CRU do
+    conjunto e pedia telemetria da TAG dele, que nao mede nada.
+    """
+    agente = VoltAgent(
+        assets=_AssetsConjunto(),
+        telemetry=_TelemetriaDosPontos(),
+        work_orders=_Orders(),
+        settings=Settings(),
+        role="engineer",
+        llm=_FakeLlm([]),
+    )
+    agente._state = VoltStateModel(
+        step="aguardando_ativo", asset_tag=None, asset_name=None,
+        symptom=None, not_found_attempts=0,
+    )
+    dados = await agente._t_dados_do_ativo("MTR-F00")
+
+    assert dados["encontrado"] is True
+    # Status consolidado: o pior entre os mancais, nunca o "unknown" da linha.
+    assert dados["status"] == "warning"
+    # Leituras vindas dos pontos, com o PIOR valor de cada grandeza.
+    assert dados["leituras_atuais"]["Vibracao_Velocidade_RMS"] == 7.4
+    assert dados["leituras_atuais"]["Temperatura"] == 41.0
+    # E dizendo de qual mancal veio cada numero.
+    assert dados["origem_das_leituras"]["Vibracao_Velocidade_RMS"] == _MANCAL_B.name
+
+
+async def test_agente_diagnostica_conjunto_com_leituras_dos_mancais():
+    """Sem o fan-out, o diagnostico do conjunto caia em "sem dados de sensor"."""
+    agente = VoltAgent(
+        assets=_AssetsConjunto(),
+        telemetry=_TelemetriaDosPontos(),
+        work_orders=_Orders(),
+        settings=Settings(),
+        role="engineer",
+        llm=_FakeLlm([]),
+    )
+    agente._state = VoltStateModel(
+        step="aguardando_ativo", asset_tag=None, asset_name=None,
+        symptom=None, not_found_attempts=0,
+    )
+    agente._diagnosis = None
+    agente._critical = set()
+    resultado = await agente._t_diagnosticar("MTR-F00", "vibracao")
+    assert "sem dados de sensor" not in resultado["falha"].lower()
+    assert resultado["confianca"] >= 0.5  # 7.4 mm/s cai na faixa de atencao

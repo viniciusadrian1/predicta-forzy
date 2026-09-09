@@ -201,3 +201,22 @@ def test_fallback_psm6_resgata_placa_degradada():
 
     assert not padrao.strip(), "amostra deixou de ser um caso de PSM 3 vazio"
     assert com_fallback.strip(), "o fallback PSM 6 nao resgatou a leitura"
+
+
+def test_ip_tolera_ruido_de_ocr_e_normaliza_o_valor():
+    """"1p55" numa placa gravada e IP55 — e precisa ser GRAVADO como IP55.
+
+    Texto real vindo de uma foto de plaqueta metalica: o "I" sai como 1 e o
+    "P" minusculo. A regex captura so os digitos para tolerar isso, entao o
+    valor passa por um normalizador antes de virar campo do cadastro.
+    """
+    campos = {
+        f.field: f.value
+        for f in parse_nameplate_text("e 145 [ict B At soKliom 63 | 1p55]", 0.8)
+    }
+    assert campos.get("ip_rating") == "IP55"
+
+    # Continua lendo a forma limpa...
+    assert {f.field: f.value for f in parse_nameplate_text("IP55", 0.8)}["ip_rating"] == "IP55"
+    # ...e nao confunde um ano com grau de protecao.
+    assert "ip_rating" not in {f.field for f in parse_nameplate_text("NBR 1955", 0.8)}

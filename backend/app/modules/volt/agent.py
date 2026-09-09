@@ -24,6 +24,7 @@ from app.modules.assets.repository import AssetRepository
 from app.modules.rag.llm import LlmClient
 from app.modules.telemetry.repository import TelemetryRepository
 from app.modules.volt.diagnosis import diagnose
+from app.modules.volt.lookup import ler_telemetria, resolver_ativo
 from app.modules.volt.models import WorkOrder
 from app.modules.volt.repository import WorkOrderRepository
 from app.modules.volt.schemas import (
@@ -267,17 +268,22 @@ class VoltAgent:
         return {"erro": f"ferramenta desconhecida: {name}"}
 
     async def _t_dados_do_ativo(self, tag: str) -> dict:
-        asset = await self._assets.get_asset_by_tag(tag) if tag else None
-        if asset is None:
+        # Resolve por codigo OU por nome/localizacao, com o status CONSOLIDADO -
+        # o cru diria "unknown" para um conjunto, e era isso que o assistente
+        # repetia para o usuario enquanto as telas mostravam "operacional".
+        resolvido = await resolver_ativo(self._assets, tag) if tag else None
+        if resolvido is None:
             return {"encontrado": False, "tag": tag}
+        asset, status = resolvido
         self._state.asset_tag = asset.tag
         self._state.asset_name = asset.name or asset.tag
-        latest = await self._telemetry.latest(asset.tag)
+        # Um conjunto nao mede: as leituras vem dos seus pontos.
+        leituras, origem = await ler_telemetria(self._telemetry, self._assets, asset)
         return {
             "encontrado": True,
             "tag": asset.tag,
             "nome": asset.name,
-            "status": asset.status,
+            "status": status,
             "placa": {
                 "fabricante": asset.manufacturer,
                 "modelo": asset.model,
@@ -288,7 +294,8 @@ class VoltAgent:
                 "classe_isolamento": asset.insulation_class,
                 "grau_protecao": asset.ip_rating,
             },
-            "leituras_atuais": {row["variable"]: row["value"] for row in latest},
+            "leituras_atuais": leituras,
+            "origem_das_leituras": origem or None,
         }
 
     async def _t_buscar_manuais(self, consulta: str) -> dict:
@@ -315,14 +322,15 @@ class VoltAgent:
 
     async def _t_diagnosticar(self, tag: str, sintoma: str) -> dict:
         sintoma = _SYMPTOM_ALIASES.get(sintoma.lower(), sintoma.lower())
-        asset = await self._assets.get_asset_by_tag(tag) if tag else None
-        if asset is None:
+        resolvido = await resolver_ativo(self._assets, tag) if tag else None
+        if resolvido is None:
             return {"erro": f"ativo {tag} nao encontrado"}
+        asset, _status = resolvido
         self._state.asset_tag = asset.tag
         self._state.asset_name = asset.name or asset.tag
         self._state.symptom = sintoma
-        latest = await self._telemetry.latest(asset.tag)
-        readings = {row["variable"]: float(row["value"]) for row in latest}
+        leituras, _origem = await ler_telemetria(self._telemetry, self._assets, asset)
+        readings = {variavel: float(valor) for variavel, valor in leituras.items()}
         dx = diagnose(sintoma, readings)
         detailed = has_required_role(self._role, "engineer")
         self._diagnosis = DiagnosisOut(

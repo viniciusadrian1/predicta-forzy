@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -93,7 +94,14 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
         "Rotação (RPM)",
         re.compile(r"(\d{3,4})\s*(?:RPM|r/min|min-?1)", re.IGNORECASE),
     ),
-    ("ip_rating", "Grau de proteção", re.compile(r"(IP\s?\d{2})", re.IGNORECASE)),
+    (
+        "ip_rating",
+        "Grau de proteção",
+        # O "I" de IP sai como 1 ou l no OCR de placa gravada ("1p55"). A faixa
+        # 2x-6x cobre os graus reais (IP21..IP68) e evita casar com um ano solto
+        # como "1955". O valor e normalizado para "IP##" em _NORMALIZADORES.
+        re.compile(r"\b[I1l][Pp]\s?([2-6]\d)\b"),
+    ),
     (
         "insulation_class",
         "Classe de isolamento",
@@ -136,6 +144,14 @@ EXPECTED_FIELDS = (
 )
 
 
+# Normalizacao do valor extraido. A regex de IP captura so os digitos (para
+# tolerar o "1p55" que o OCR produz em placa gravada); o cadastro precisa
+# receber "IP55", nao "55".
+_NORMALIZADORES: dict[str, "Callable[[str], str]"] = {
+    "ip_rating": lambda valor: f"IP{valor.strip()}",
+}
+
+
 def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[ParsedField]:
     """Extrai os campos tipicos de uma placa de motor a partir do texto OCR."""
     fields: list[ParsedField] = []
@@ -155,7 +171,11 @@ def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[Parsed
     for key, label, pattern in _PATTERNS:
         match = pattern.search(text)
         if match:
-            fields.append(ParsedField(key, label, match.group(1).strip(), base_confidence))
+            valor = match.group(1).strip()
+            normalizar = _NORMALIZADORES.get(key)
+            fields.append(
+                ParsedField(key, label, normalizar(valor) if normalizar else valor, base_confidence)
+            )
 
     # Potencia em CV/HP convertida para kW quando kW nao foi encontrado.
     if not any(f.field == "power_kw" for f in fields):
