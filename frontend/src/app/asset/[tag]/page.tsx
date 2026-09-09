@@ -16,7 +16,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, getAsset, validateAsset } from "@/lib/api";
+import { ApiError, getAsset, getAssets, validateAsset } from "@/lib/api";
+import { effectiveStatus, pointsOf } from "@/lib/assetGroup";
 import { canValidate, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -51,6 +52,10 @@ type SensorConfig = {
   crit?: number;
   hint?: string;
 };
+// O sensor IO-Link dos mancais mede so vibracao (vel/acel) e temperatura.
+// Tensao/Corrente/Rotacao nao existem nele — mostrar daria 'SEM LEITURA'.
+const POINT_VARS = ["Vibracao_Velocidade_RMS", "Vibracao_Aceleracao_RMS", "Temperatura"];
+
 const SENSORS: SensorConfig[] = [
   { variable: "Tensao", label: "Tensão", unit: "V", color: "#38bdf8" },
   { variable: "Corrente", label: "Corrente", unit: "A", color: "#22d3ee" },
@@ -99,6 +104,15 @@ export default function AssetPage({ params }: AssetPageProps) {
     queryFn: () => getAsset(tag),
   });
   const asset = assetQuery.data;
+
+  // Pontos de medicao deste ativo (ex.: os dois mancais do conjunto Forzy).
+  const allAssetsQuery = useQuery({
+    queryKey: ["assets"],
+    queryFn: () => getAssets(),
+    refetchInterval: 15000,
+  });
+  const points = pointsOf(allAssetsQuery.data ?? [], tag);
+  const isGroup = points.length > 0;
 
   const validateMutation = useMutation({
     mutationFn: () => validateAsset(tag),
@@ -196,7 +210,7 @@ export default function AssetPage({ params }: AssetPageProps) {
           <>
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-slate-100">{asset.tag}</h1>
-              <StatusBadge status={asset.status} />
+              <StatusBadge status={effectiveStatus(asset, points)} />
               <span className="text-slate-400">{asset.name}</span>
               <LineageBadge asset={asset} />
               {showValidate && (
@@ -212,43 +226,107 @@ export default function AssetPage({ params }: AssetPageProps) {
               )}
             </div>
 
-            <NextAction tag={asset.tag} />
+            {isGroup ? (
+              /* ---- Ativo que AGRUPA pontos de medicao (conjunto Forzy) ----
+                 O pai nao tem telemetria propria: quem mede sao os mancais.
+                 Entao mostramos os dois lado a lado, no mesmo equipamento. */
+              <>
+                <section className="mb-6">
+                  <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Gêmeo 3D — bancada de bomba de teste
+                  </h2>
+                  <PumpBenchViewer3D />
+                </section>
 
-            <section className="mb-6">
-              <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                {BENCH_TAGS.includes(asset.tag)
-                  ? "Gêmeo 3D — bancada de bomba de teste"
-                  : "Modelo 3D do ativo"}
-              </h2>
-              {BENCH_TAGS.includes(asset.tag) ? (
-                <PumpBenchViewer3D activeTag={asset.tag} />
-              ) : (
-                <MotorViewer3D assetTag={asset.tag} status={asset.status} />
-              )}
-            </section>
+                <section className="mb-6">
+                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Telemetria por mancal
+                  </h2>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {points.map((point) => (
+                      <div key={point.tag}>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-100">
+                            {point.name ?? point.tag}
+                          </span>
+                          <span className="font-mono text-xs text-slate-500">{point.tag}</span>
+                          <StatusBadge status={point.status} />
+                        </div>
+                        <NextAction tag={point.tag} />
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {SENSORS.filter((s) => POINT_VARS.includes(s.variable)).map(
+                            (sensor) => (
+                              <SensorPanel
+                                key={sensor.variable}
+                                tag={point.tag}
+                                variable={sensor.variable}
+                                label={sensor.label}
+                                unit={sensor.unit}
+                                color={sensor.color}
+                                warn={sensor.warn}
+                                crit={sensor.crit}
+                                hint={sensor.hint}
+                              />
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
-            <section className="mb-6">
-              <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Telemetria em tempo real
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {SENSORS.map((sensor) => (
-                  <SensorPanel
-                    key={sensor.variable}
-                    tag={asset.tag}
-                    variable={sensor.variable}
-                    label={sensor.label}
-                    unit={sensor.unit}
-                    color={sensor.color}
-                    warn={sensor.warn}
-                    crit={sensor.crit}
-                    hint={sensor.hint}
-                  />
+                {points.map((point) => (
+                  <div key={point.tag}>
+                    <p className="mb-1 text-xs text-slate-500">
+                      {point.name ?? point.tag}{" "}
+                      <span className="font-mono text-slate-600">({point.tag})</span>
+                    </p>
+                    <AssetHealth tag={point.tag} />
+                  </div>
                 ))}
-              </div>
-            </section>
+              </>
+            ) : (
+              /* ---- Ativo simples: mede a si proprio ---- */
+              <>
+                <NextAction tag={asset.tag} />
 
-            <AssetHealth tag={asset.tag} />
+                <section className="mb-6">
+                  <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {BENCH_TAGS.includes(asset.tag)
+                      ? "Gêmeo 3D — bancada de bomba de teste"
+                      : "Modelo 3D do ativo"}
+                  </h2>
+                  {BENCH_TAGS.includes(asset.tag) ? (
+                    <PumpBenchViewer3D activeTag={asset.tag} />
+                  ) : (
+                    <MotorViewer3D assetTag={asset.tag} status={asset.status} />
+                  )}
+                </section>
+
+                <section className="mb-6">
+                  <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Telemetria em tempo real
+                  </h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {SENSORS.map((sensor) => (
+                      <SensorPanel
+                        key={sensor.variable}
+                        tag={asset.tag}
+                        variable={sensor.variable}
+                        label={sensor.label}
+                        unit={sensor.unit}
+                        color={sensor.color}
+                        warn={sensor.warn}
+                        crit={sensor.crit}
+                        hint={sensor.hint}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <AssetHealth tag={asset.tag} />
+              </>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>

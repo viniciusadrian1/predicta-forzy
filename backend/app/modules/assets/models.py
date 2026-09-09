@@ -46,6 +46,9 @@ class Asset(UUIDMixin, TimestampMixin, CatalogBase):
 
     tag: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     asset_type: Mapped[str] = mapped_column(String(48), nullable=False, default="motor")
+    # Ponto de medicao de outro ativo (ex.: os dois MANCAIS do conjunto
+    # motor-bomba da Forzy). Nulo = ativo raiz, aparece na lista de ativos.
+    parent_tag: Mapped[str | None] = mapped_column(String(64), index=True)
     name: Mapped[str | None] = mapped_column(String(160))
     manufacturer: Mapped[str | None] = mapped_column(String(80))
     model: Mapped[str | None] = mapped_column(String(80))

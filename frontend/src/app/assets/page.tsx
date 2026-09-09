@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type CreateAssetInput, createAsset, getAssets } from "@/lib/api";
+import { effectiveStatus, pointsOf, rootAssets } from "@/lib/assetGroup";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -219,9 +220,20 @@ export default function AssetsPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {assetsQuery.data?.map((asset) => (
-          <AssetCard key={asset.id} asset={asset} />
-        ))}
+        {/* So os ativos RAIZ. Pontos de medicao (ex.: os dois mancais do
+            conjunto da Forzy) aparecem dentro do ativo, nao como equipamentos
+            separados. */}
+        {rootAssets(assetsQuery.data ?? []).map((asset) => {
+          const pontos = pointsOf(assetsQuery.data ?? [], asset.tag);
+          return (
+            <AssetCard
+              key={asset.id}
+              asset={asset}
+              points={pontos.length}
+              status={effectiveStatus(asset, pontos)}
+            />
+          );
+        })}
       </div>
     </AppShell>
   );

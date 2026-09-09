@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { effectiveStatus, pointsOf, rootAssets } from "@/lib/assetGroup";
 import type { Asset } from "@/types";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -27,9 +28,25 @@ export function PlantMap({ assets }: { assets: Asset[] }) {
   const router = useRouter();
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const markers = assets.filter(
-    (asset) => asset.position_x !== null && asset.position_y !== null,
-  );
+  // Um marcador por EQUIPAMENTO. O conjunto motor-bomba da Forzy nao tem posicao
+  // propria: fica no meio dos seus pontos de medicao (os dois mancais), como uma
+  // maquina so, e nao como dois pontos soltos na planta.
+  const markers = rootAssets(assets)
+    .map((asset) => {
+      const points = pointsOf(assets, asset.tag);
+      const located = asset.position_x !== null ? [asset] : points;
+      const withPos = located.filter((a) => a.position_x !== null && a.position_y !== null);
+      if (withPos.length === 0) return null;
+      const avg = (pick: (a: Asset) => number | null) =>
+        withPos.reduce((sum, a) => sum + (pick(a) ?? 0), 0) / withPos.length;
+      return {
+        ...asset,
+        position_x: avg((a) => a.position_x),
+        position_y: avg((a) => a.position_y),
+        status: effectiveStatus(asset, points),
+      };
+    })
+    .filter((a) => a !== null);
 
   return (
     <svg

@@ -4,6 +4,9 @@ export interface Asset {
   id: string;
   tag: string;
   asset_type: string;
+  /** Preenchido = este ativo e um PONTO DE MEDICAO do ativo `parent_tag`
+   *  (ex.: mancal do conjunto motor-bomba), nao um equipamento proprio. */
+  parent_tag: string | null;
   name: string | null;
   manufacturer: string | null;
   model: string | null;

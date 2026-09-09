@@ -96,6 +96,34 @@ async def seed() -> None:
         # mancal lado bomba, Porta 2 -> mancal lado motor).
         # Limiares por percentil do contrato de metricas (governanca, Tabela 9).
         BENCH_MODEL = "Bancada bomba de teste R11.06-2130-B01A"
+        BENCH_TAG = "MTR-F00"  # o conjunto; F01/F02 sao seus pontos de medicao
+
+        # O EQUIPAMENTO em si. Nao tem telemetria propria: quem mede sao os
+        # mancais. Fica sem position_x/y para nao virar uma terceira maquina na
+        # planta (a planta ja agrupa os dois mancais numa bancada so).
+        bench = (
+            await session.execute(select(Asset).where(Asset.tag == BENCH_TAG))
+        ).scalar_one_or_none()
+        if bench is None:
+            session.add(
+                Asset(
+                    tag=BENCH_TAG,
+                    asset_type="motor",
+                    name="Motor-bomba Forzy — bancada de teste",
+                    manufacturer="Forzy",
+                    model=BENCH_MODEL,
+                    voltage_v=220.0,
+                    plant_id=plant.id,
+                    area_id=area.id,
+                    status="unknown",
+                    data_origin="importacao",
+                )
+            )
+            logger.info("Ativo criado: %s (conjunto)", BENCH_TAG)
+        else:
+            bench.name = "Motor-bomba Forzy — bancada de teste"
+            bench.model = BENCH_MODEL
+
         for tag, point_name, pos_x, thresholds in (
             (
                 "MTR-F01",
@@ -127,7 +155,8 @@ async def seed() -> None:
                 session.add(
                     Asset(
                         tag=tag,
-                        asset_type="motor",
+                        asset_type="mancal",
+                        parent_tag=BENCH_TAG,
                         name=point_name,
                         manufacturer="Forzy",
                         model=BENCH_MODEL,
@@ -147,7 +176,9 @@ async def seed() -> None:
                 # sensor S1/S2"), que reforcava o erro de "dois motores".
                 existing.name = point_name
                 existing.model = BENCH_MODEL
-                logger.info("Ativo atualizado (nomenclatura): %s", tag)
+                existing.asset_type = "mancal"
+                existing.parent_tag = BENCH_TAG
+                logger.info("Ativo atualizado (ponto de medicao de %s): %s", BENCH_TAG, tag)
 
         for username, password, role, full_name in _SEED_USERS:
             user = (

@@ -48,6 +48,9 @@ class AreaOut(BaseModel):
 class AssetBase(BaseModel):
     asset_type: str = "motor"
     name: str | None = None
+    # Preenchido = este ativo e um PONTO DE MEDICAO do ativo `parent_tag`
+    # (ex.: mancal do conjunto motor-bomba), nao um equipamento proprio.
+    parent_tag: str | None = None
     manufacturer: str | None = None
     model: str | None = None
     serial_number: str | None = None

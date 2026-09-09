@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { alertTypeLabel, severityLabel } from "@/lib/alertLabels";
 import { acknowledgeAlert, getAlerts, getAssets } from "@/lib/api";
+import { effectiveStatus, pointsOf, rootAssets } from "@/lib/assetGroup";
 import { hasRole, useAuth } from "@/lib/auth";
 import { useToasts } from "@/lib/toast";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -92,20 +93,25 @@ export default function OverviewPage() {
   const ackingId = ackMutation.isPending ? ackMutation.variables : null;
 
   const assets = assetsQuery.data ?? [];
+  // Conta EQUIPAMENTOS, nao pontos de medicao: os dois mancais do conjunto da
+  // Forzy sao um ativo so. O status de um conjunto e o pior entre seus pontos.
+  const equipamentos = rootAssets(assets);
+  const statusDe = (a: (typeof equipamentos)[number]) =>
+    effectiveStatus(a, pointsOf(assets, a.tag));
   const counts = {
-    total: assets.length,
-    ok: assets.filter((a) => a.status === "ok").length,
-    warning: assets.filter((a) => a.status === "warning").length,
-    critical: assets.filter((a) => a.status === "critical").length,
+    total: equipamentos.length,
+    ok: equipamentos.filter((a) => statusDe(a) === "ok").length,
+    warning: equipamentos.filter((a) => statusDe(a) === "warning").length,
+    critical: equipamentos.filter((a) => statusDe(a) === "critical").length,
   };
   const alerts = [...(alertsQuery.data ?? [])].sort(
     (a, b) =>
       (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0) ||
       +new Date(b.created_at) - +new Date(a.created_at),
   );
-  const rankedAssets = [...assets].sort(
-    (a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2),
-  );
+  const rankedAssets = equipamentos
+    .map((a) => ({ ...a, status: statusDe(a) }))
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
 
   return (
     <AppShell>

@@ -95,7 +95,13 @@ class AssetRepository:
     async def list_hierarchy(self) -> list[Plant]:
         result = await self._session.execute(
             select(Plant)
-            .options(selectinload(Plant.areas).selectinload(Area.assets))
+            # A arvore lista EQUIPAMENTOS. Pontos de medicao (mancais com
+            # parent_tag) aparecem dentro da tela do equipamento, nao ao lado dele.
+            .options(
+                selectinload(Plant.areas).selectinload(
+                    Area.assets.and_(Asset.parent_tag.is_(None))
+                )
+            )
             .order_by(Plant.code)
         )
         return list(result.scalars().all())
