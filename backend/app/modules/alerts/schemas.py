@@ -20,6 +20,8 @@ class AlertOut(BaseModel):
     message: str
     ml_score: float | None
     created_at: datetime
+    last_seen_at: datetime | None = None
+    occurrence_count: int = 1
     acknowledged: bool
     ack_by: str | None
     ack_at: datetime | None

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -72,6 +72,61 @@ class AlertRepository:
         )
         result = await self._session.execute(stmt)
         return result.first() is not None
+
+    async def reabrir_recente(
+        self, asset_tag: str, alert_type: str, minutes: int
+    ) -> bool:
+        """Reabre o alerta que acabou de fechar, em vez de criar outro.
+
+        Uma condicao intermitente normaliza e volta em segundos. Como
+        `close_resolved` ja fechou o registro, `has_open` libera e nasceria uma
+        linha nova a cada ida e volta - 28 delas em 24h so num tipo de alerta.
+        Dentro da janela, isso vira reincidencia do MESMO episodio: o contador
+        sobe e `last_seen_at` avanca.
+
+        So reabre o que a MAQUINA fechou (ack_by="auto"). Reconhecimento humano
+        e uma decisao registrada; reabri-la por baixo apagaria o comentario do
+        tecnico e faria o alerta ressurgir sem explicacao.
+        """
+        desde = datetime.now(UTC) - timedelta(minutes=minutes)
+        stmt = (
+            select(Alert)
+            .where(
+                Alert.asset_tag == asset_tag,
+                Alert.alert_type == alert_type,
+                Alert.acknowledged == True,  # noqa: E712
+                Alert.ack_by == "auto",
+                Alert.ack_at.is_not(None),
+                Alert.ack_at >= desde,
+            )
+            .order_by(Alert.ack_at.desc())
+            .limit(1)
+        )
+        alerta = (await self._session.execute(stmt)).scalars().first()
+        if alerta is None:
+            return False
+        alerta.acknowledged = False
+        alerta.ack_by = None
+        alerta.ack_at = None
+        alerta.ack_comment = None
+        alerta.occurrence_count = (alerta.occurrence_count or 1) + 1
+        alerta.last_seen_at = datetime.now(UTC)
+        await self._session.commit()
+        return True
+
+    async def marcar_ocorrencia(self, asset_tag: str, alert_type: str) -> None:
+        """Avanca `last_seen_at` do alerta aberto: a condicao segue valendo."""
+        stmt = (
+            update(Alert)
+            .where(
+                Alert.asset_tag == asset_tag,
+                Alert.alert_type == alert_type,
+                Alert.acknowledged == False,  # noqa: E712
+            )
+            .values(last_seen_at=datetime.now(UTC))
+        )
+        await self._session.execute(stmt)
+        await self._session.commit()
 
     async def close_resolved(self, asset_tag: str, active_types: set[str]) -> int:
         """Fecha os alertas de ESTADO cuja condicao nao vale mais.

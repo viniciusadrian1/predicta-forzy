@@ -37,6 +37,11 @@ TEMP_WARNING = 95.0
 TEMP_CRITICAL = 105.0
 RUL_WARNING_DAYS = 45.0
 RUL_CRITICAL_DAYS = 15.0
+# Janela de reincidencia: condicao que volta dentro dela reabre o alerta
+# anterior em vez de criar outro. Medido no historico real: episodios de ~1 min
+# que voltavam 1-1,5 min depois geravam 28 linhas em 24h para um unico tipo.
+REINCIDENCIA_MINUTOS = 5
+
 # Um alerta abre uma vez e fecha quando a condicao normaliza (ver
 # AlertRepository.has_open / close_resolved). Nao ha janela de deduplicacao por
 # tempo: enquanto a condicao valer, e o mesmo episodio - o que da, de brinde, a
@@ -158,6 +163,17 @@ class AlertsEvaluator:
             for severity, alert_type, message, score in candidates:
                 # Enquanto a condicao seguir verdadeira, e o MESMO episodio.
                 if await repo.has_open(asset_tag, alert_type):
+                    await repo.marcar_ocorrencia(asset_tag, alert_type)
+                    continue
+                # Condicao intermitente: normalizou, fechou e voltou logo. Isso
+                # e REINCIDENCIA do mesmo episodio, nao um alerta novo.
+                if await repo.reabrir_recente(asset_tag, alert_type, REINCIDENCIA_MINUTOS):
+                    logger.info(
+                        "alerta reaberto por reincidencia: %s/%s",
+                        asset_tag,
+                        alert_type,
+                        extra={"event": "alert_recurrence", "asset_tag": asset_tag},
+                    )
                     continue
                 alert = await repo.create(
                     Alert(

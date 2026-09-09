@@ -310,3 +310,81 @@ async def test_historico_separa_reconhecimento_humano_do_fechamento_automatico(
 
     # ...e o fechamento automatico NAO polui esse historico.
     assert all(a["ack_by"] != "auto" for a in historico)
+
+
+async def test_reincidencia_reabre_o_alerta_em_vez_de_criar_outro(catalog_sessionmaker):
+    """Condicao que vai e volta e o MESMO episodio, com contador.
+
+    Intermitencia normaliza e retorna em segundos: close_resolved fecha,
+    has_open libera, e nascia uma linha nova a cada ida e volta (28 delas em
+    24h so num tipo). Agora reabre a mesma, somando a ocorrencia.
+    """
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+        await repo.create(
+            Alert(
+                asset_tag="MTR-FLAP", severity="INFO",
+                alert_type="ANOMALY_DETECTED", message="vibracao atipica",
+            )
+        )
+        # normaliza -> a maquina fecha
+        assert await repo.close_resolved("MTR-FLAP", set()) == 1
+        # volta logo em seguida, dentro da janela
+        assert await repo.reabrir_recente("MTR-FLAP", "ANOMALY_DETECTED", 5) is True
+
+        todos = await repo.list_alerts(asset_tag="MTR-FLAP")
+        assert len(todos) == 1, "reincidencia criou linha nova"
+        assert todos[0].occurrence_count == 2
+        assert todos[0].acknowledged is False
+        assert todos[0].last_seen_at is not None
+        # o fechamento automatico anterior nao pode deixar residuo
+        assert todos[0].ack_by is None and todos[0].ack_comment is None
+
+
+async def test_reincidencia_nao_reabre_reconhecimento_humano(catalog_sessionmaker):
+    """Decisao de pessoa nao pode ser desfeita por baixo.
+
+    Reabrir um ack humano apagaria o comentario do tecnico e faria o alerta
+    ressurgir sem explicacao. So o que a MAQUINA fechou volta.
+    """
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+        alerta = await repo.create(
+            Alert(
+                asset_tag="MTR-HUM", severity="WARNING",
+                alert_type="THRESHOLD_APPROACHING", message="vibracao subindo",
+            )
+        )
+        await repo.acknowledge(alerta, "operador", "Verificado em campo")
+
+        assert await repo.reabrir_recente("MTR-HUM", "THRESHOLD_APPROACHING", 5) is False
+        todos = await repo.list_alerts(asset_tag="MTR-HUM")
+        assert todos[0].acknowledged is True
+        assert todos[0].ack_comment == "Verificado em campo"
+        assert todos[0].occurrence_count == 1
+
+
+async def test_fora_da_janela_e_episodio_novo(catalog_sessionmaker):
+    """Voltar horas depois e outra falha, nao a mesma reincidindo."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.modules.alerts.repository import AlertRepository
+
+    async with catalog_sessionmaker() as session:
+        repo = AlertRepository(session)
+        alerta = await repo.create(
+            Alert(
+                asset_tag="MTR-VELHO", severity="INFO",
+                alert_type="ANOMALY_DETECTED", message="antigo",
+            )
+        )
+        await repo.close_resolved("MTR-VELHO", set())
+        # empurra o fechamento para 3h atras
+        alerta.ack_at = datetime.now(UTC) - timedelta(hours=3)
+        await session.commit()
+
+        assert await repo.reabrir_recente("MTR-VELHO", "ANOMALY_DETECTED", 5) is False

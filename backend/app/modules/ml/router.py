@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_actor
-from app.core.rbac import require_role
+from app.core.rbac import require_authenticated, require_role
 from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.ml.models import MlFeedback
 from app.modules.ml.repository import MlFeedbackRepository
@@ -45,7 +45,10 @@ async def ml_train(
     return ml_service.status()
 
 
-@router.post("/ml/baseline/predict", response_model=BaselinePrediction)
+@router.post(
+    "/ml/baseline/predict",
+    dependencies=[Depends(require_authenticated())],
+    response_model=BaselinePrediction)
 async def baseline_predict(
     payload: PredictRequest,
     session: AsyncSession = Depends(get_timeseries_session),
@@ -54,7 +57,10 @@ async def baseline_predict(
     return await ml_service.predict_baseline(session, payload.asset_tag)
 
 
-@router.post("/ml/anomaly/predict", response_model=AnomalyPrediction)
+@router.post(
+    "/ml/anomaly/predict",
+    dependencies=[Depends(require_authenticated())],
+    response_model=AnomalyPrediction)
 async def anomaly_predict(
     payload: PredictRequest,
     session: AsyncSession = Depends(get_timeseries_session),
@@ -63,7 +69,10 @@ async def anomaly_predict(
     return await ml_service.predict_anomaly(session, payload.asset_tag)
 
 
-@router.post("/ml/fault/predict", response_model=FaultPrediction)
+@router.post(
+    "/ml/fault/predict",
+    dependencies=[Depends(require_authenticated())],
+    response_model=FaultPrediction)
 async def fault_predict(
     payload: PredictRequest,
     session: AsyncSession = Depends(get_timeseries_session),
@@ -82,7 +91,10 @@ async def rul_estimate(
     return await ml_service.estimate_rul(session, tag, catalog_session=catalog)
 
 
-@router.post("/ml/feedback", response_model=FeedbackResponse)
+@router.post(
+    "/ml/feedback",
+    dependencies=[Depends(require_authenticated())],
+    response_model=FeedbackResponse)
 async def ml_feedback(
     payload: FeedbackRequest,
     actor: str = Depends(get_current_actor),

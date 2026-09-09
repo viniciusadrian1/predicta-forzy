@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 logger = logging.getLogger("forzy.vision.ocr")
 
@@ -44,6 +44,15 @@ class ExtractionResult:
 
 
 # --------------------------- Pre-processamento ---------------------------
+# Raio do BoxBlur (janela de ~51px na imagem ja normalizada em 1600px) e quanto
+# o pixel precisa estar abaixo da media local para contar como tinta. Medidos:
+# janelas menores com margem maior liam melhor em foto degradada, mas
+# CORROMPIAM valor em placa limpa (a corrente "11,5/6,6" virava "11,5/6,66") -
+# e valor errado com confianca alta e pior que campo ausente.
+_RAIO_LOCAL = 25
+_MARGEM_TINTA = 10
+# Abaixo disto a leitura e considerada fraca e vale uma segunda tentativa.
+_COBERTURA_ACEITAVEL = 0.6
 def preprocess_image(raw: bytes) -> Image.Image:
     """Normaliza a imagem da placa para melhorar a leitura por OCR.
 
@@ -60,6 +69,32 @@ def preprocess_image(raw: bytes) -> Image.Image:
         scale = 1600 / longest
         image = image.resize((round(image.width * scale), round(image.height * scale)))
     return image
+
+
+def preprocess_adaptativo(raw: bytes) -> Image.Image:
+    """Binariza com limiar ADAPTATIVO — segunda tentativa para foto ruim.
+
+    Cada pixel e comparado com a media da sua vizinhanca, nao com um valor unico
+    do quadro. E o que salva a foto de iluminacao desigual (metade da placa na
+    sombra, metade estourada), onde qualquer limiar global apaga um lado ou
+    satura o outro — e onde o pipeline padrao chega a devolver ZERO campo.
+
+    NAO e o padrao. Medido em banco balanceado (so 2 de 8 degradacoes sendo de
+    iluminacao): 9 casos melhoram, 9 PIORAM, cobertura media praticamente igual
+    (0,848 -> 0,862) e 28% mais lento. O ganho grande so aparece quando o banco
+    e dominado por iluminacao desigual. Como segunda tentativa, fica o resgate
+    sem as regressoes.
+
+    O BoxBlur do PIL ja e a media local: sem dependencia nova (numpy nem e
+    dependencia declarada deste backend).
+    """
+    base = preprocess_image(raw)
+    media_local = base.filter(ImageFilter.BoxBlur(_RAIO_LOCAL))
+    # (pixel - media_local + 128): tinta e quem ficou abaixo da media local.
+    contraste = ImageChops.subtract(base, media_local, scale=1, offset=128)
+    binaria = contraste.point(lambda p: 0 if p < 128 - _MARGEM_TINTA else 255, mode="L")
+    # Mediana depois do limiar tira o salpico que a binarizacao cria no grao.
+    return binaria.filter(ImageFilter.MedianFilter(3))
 
 
 # ------------------------------- Parser ----------------------------------
@@ -394,13 +429,25 @@ def extract_nameplate(raw: bytes) -> ExtractionResult:
     if engine is None:
         return ExtractionResult(engine="indisponivel", raw_text="", fields=[], coverage=0.0)
 
-    text, mean_conf = engine.read_text(image)
-    base = round(max(mean_conf, 0.3), 2)
-    fields = merge_fields(
-        parse_nameplate_text(text, base_confidence=base),
-        parse_generic_fields(text, base_confidence=base),
-    )
     engine_name = "tesseract" if isinstance(engine, TesseractEngine) else "paddleocr"
-    return ExtractionResult(
-        engine=engine_name, raw_text=text, fields=fields, coverage=_coverage(fields)
-    )
+
+    def _tentar(imagem: Image.Image) -> ExtractionResult:
+        text, mean_conf = engine.read_text(imagem)
+        base = round(max(mean_conf, 0.3), 2)
+        fields = merge_fields(
+            parse_nameplate_text(text, base_confidence=base),
+            parse_generic_fields(text, base_confidence=base),
+        )
+        return ExtractionResult(
+            engine=engine_name, raw_text=text, fields=fields, coverage=_coverage(fields)
+        )
+
+    resultado = _tentar(image)
+    if resultado.coverage >= _COBERTURA_ACEITAVEL:
+        return resultado
+
+    # Leitura fraca: pode ser iluminacao desigual. Uma segunda passada com
+    # limiar adaptativo, ficando com a melhor das duas — assim o caminho que ja
+    # funcionava nunca piora, e so a foto ruim paga o tempo extra.
+    alternativa = _tentar(preprocess_adaptativo(raw))
+    return alternativa if alternativa.coverage > resultado.coverage else resultado

@@ -237,6 +237,10 @@ export interface Alert {
   message: string;
   ml_score: number | null;
   created_at: string;
+  /** Ultima vez que a condicao foi observada (created_at = abertura). */
+  last_seen_at: string | null;
+  /** Quantas vezes a condicao reincidiu — intermitencia vs degradacao. */
+  occurrence_count: number;
   acknowledged: boolean;
   ack_by: string | null;
   ack_at: string | null;

@@ -273,7 +273,7 @@ export async function acknowledgeAlert(id: string, comment: string): Promise<Ale
 export async function predictBaseline(tag: string): Promise<BaselinePrediction> {
   const response = await fetch(apiUrl("/ml/baseline/predict"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ asset_tag: tag }),
   });
   return parse<BaselinePrediction>(response);
@@ -282,7 +282,7 @@ export async function predictBaseline(tag: string): Promise<BaselinePrediction> 
 export async function predictAnomaly(tag: string): Promise<AnomalyPrediction> {
   const response = await fetch(apiUrl("/ml/anomaly/predict"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ asset_tag: tag }),
   });
   return parse<AnomalyPrediction>(response);
@@ -297,7 +297,7 @@ export async function getRul(tag: string): Promise<RulEstimate> {
 export async function predictFault(tag: string): Promise<FaultPrediction> {
   const response = await fetch(apiUrl("/ml/fault/predict"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ asset_tag: tag }),
   });
   return parse<FaultPrediction>(response);

@@ -141,6 +141,37 @@ def require_role(minimum: str) -> Callable[..., Awaitable[Principal]]:
     return _dependency
 
 
+def require_authenticated() -> Callable[..., Awaitable[Principal]]:
+    """Dependency que exige uma SESSAO, sem exigir papel algum.
+
+    `require_role("viewer")` nao serve para isto: quem chega sem credencial ja
+    e resolvido como viewer anonimo (ver `resolve_principal`), entao o gate
+    passaria batido. Aqui o que se cobra e identidade, nao privilegio.
+
+    Usada onde a requisicao ESCREVE com um autor (o feedback de ML grava
+    `actor`) ou GASTA recurso pago (as rotas que chamam o LLM). Um endpoint
+    desses aberto num IP publico e conta de outra pessoa no nosso cartao, e
+    dado sem dono entrando na tabela que existe para auditar o modelo.
+    """
+
+    async def _dependency(principal: Principal = Depends(get_principal)) -> Principal:
+        if not rbac_enforced():
+            return principal
+        if not principal.is_authenticated:
+            logger.warning(
+                "acesso anonimo recusado",
+                extra={"event": "auth_required", "actor": principal.username},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Esta operacao exige uma sessao. Faca login.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return principal
+
+    return _dependency
+
+
 def require_any_role(allowed: frozenset[str]) -> Callable[..., Awaitable[Principal]]:
     """Dependency que exige que o papel esteja em ``allowed`` (nao-linear).
 

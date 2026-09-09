@@ -222,3 +222,52 @@ async def test_escrita_com_token_expirado_manda_relogar_e_nao_nega_permissao(cli
         headers={"Authorization": f"Bearer {expirado}"},
     )
     assert resp.status_code == 401
+
+
+async def test_rotas_que_escrevem_ou_gastam_llm_recusam_anonimo(client, monkeypatch):
+    """Escrita e chamada de LLM nao podem sair de requisicao sem dono.
+
+    `require_role("viewer")` nao serviria aqui: sem credencial o principal ja e
+    resolvido como viewer anonimo, entao o gate passaria batido. O que se cobra
+    e IDENTIDADE. /ml/feedback gravava linha com actor='anonymous', e as rotas
+    de chat consomem a chave paga do servidor num IP publico.
+    """
+    monkeypatch.setattr(rbac, "rbac_enforced", lambda: True)
+
+    for metodo, rota, corpo in (
+        ("post", "/api/v1/ml/feedback",
+         {"asset_tag": "MTR-001", "model": "anomaly", "prediction": "x", "is_correct": True}),
+        ("post", "/api/v1/volt/message", {"message": "oi"}),
+        ("post", "/api/v1/ml/anomaly/predict", {"asset_tag": "MTR-001"}),
+    ):
+        resp = await getattr(client, metodo)(rota, json=corpo)
+        assert resp.status_code == 401, f"{rota} respondeu {resp.status_code} para anonimo"
+        assert resp.headers.get("WWW-Authenticate") == "Bearer"
+
+
+async def test_leitura_publica_continua_aberta(client, monkeypatch):
+    """As telas leem sem token; proteger leitura quebraria a aplicacao.
+
+    Trava o limite do endurecimento: so escrita e LLM foram fechados.
+    """
+    monkeypatch.setattr(rbac, "rbac_enforced", lambda: True)
+
+    for rota in ("/api/v1/assets", "/api/v1/alerts", "/api/v1/hierarchy"):
+        assert (await client.get(rota)).status_code == 200
+
+
+async def test_sessao_valida_continua_passando(client, monkeypatch):
+    """O endurecimento nao pode barrar quem esta logado."""
+    monkeypatch.setattr(rbac, "rbac_enforced", lambda: True)
+    login = await client.post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    if login.status_code != 200:
+        pytest.skip("usuario demo ausente neste ambiente de teste")
+    token = login.json()["access_token"]
+    resp = await client.post(
+        "/api/v1/ml/anomaly/predict",
+        json={"asset_tag": "MTR-001"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code != 401

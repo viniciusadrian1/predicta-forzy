@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.rbac import Principal, get_principal, require_role
+from app.core.rbac import require_authenticated, Principal, get_principal, require_role
 from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.assets.repository import AssetRepository
 from app.modules.telemetry.repository import TelemetryRepository
@@ -23,7 +23,10 @@ async def volt_greeting() -> VoltReply:
     return greeting_reply()
 
 
-@router.post("/volt/message", response_model=VoltReply)
+@router.post(
+    "/volt/message",
+    dependencies=[Depends(require_authenticated())],
+    response_model=VoltReply)
 async def volt_message(
     request: VoltRequest,
     principal: Principal = Depends(get_principal),

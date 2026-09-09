@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, String
+from sqlalchemy import Integer, Boolean, DateTime, Float, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infra.db.base import CatalogBase, UUIDMixin
@@ -25,6 +25,12 @@ class Alert(UUIDMixin, CatalogBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
+    # Ultima vez que a condicao foi observada. `created_at` marca a ABERTURA do
+    # episodio; sem este campo, um alerta reaberto mentiria a idade.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Quantas vezes a condicao REINCIDIU (episodios fisicos), nao quantos ciclos
+    # do avaliador passaram - contar ciclos mediria duracao/30s.
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     ack_by: Mapped[str | None] = mapped_column(String(120))
     ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

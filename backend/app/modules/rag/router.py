@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.rbac import require_role
+from app.core.rbac import require_authenticated, require_role
 from app.infra.db.base import get_catalog_session, get_timeseries_session
 from app.modules.alerts.repository import AlertRepository
 from app.modules.ml.service import ml_service
@@ -91,7 +91,10 @@ async def rag_ingest() -> IngestResult:
     return await rag_service.ingest()
 
 
-@router.post("/rag/chat", response_model=ChatResponse)
+@router.post(
+    "/rag/chat",
+    dependencies=[Depends(require_authenticated())],
+    response_model=ChatResponse)
 async def rag_chat(
     request: ChatRequest,
     catalog: AsyncSession = Depends(get_catalog_session),
@@ -102,7 +105,9 @@ async def rag_chat(
     return await rag_service.answer(request, asset_context)
 
 
-@router.post("/rag/chat/stream")
+@router.post(
+    "/rag/chat/stream",
+    dependencies=[Depends(require_authenticated())],)
 async def rag_chat_stream(
     request: ChatRequest,
     catalog: AsyncSession = Depends(get_catalog_session),

@@ -175,8 +175,29 @@ function AlertsPageInner() {
                 >
                   {alert.asset_tag} →
                 </Link>
+                {/* Reincidencia: intermitencia e uma falha diferente de
+                    degradacao continua, e sem isso as duas viravam a mesma
+                    pilha de cards iguais. */}
+                {alert.occurrence_count > 1 && (
+                  <span
+                    className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-300"
+                    title={
+                      alert.last_seen_at
+                        ? `Última ocorrência: ${new Date(alert.last_seen_at).toLocaleString("pt-BR")}`
+                        : undefined
+                    }
+                  >
+                    reincidiu {alert.occurrence_count}×
+                  </span>
+                )}
                 <span className="ml-auto text-xs text-slate-500">
                   {new Date(alert.created_at).toLocaleString("pt-BR")}
+                  {alert.occurrence_count > 1 && alert.last_seen_at && (
+                    <>
+                      {" · última "}
+                      {new Date(alert.last_seen_at).toLocaleTimeString("pt-BR")}
+                    </>
+                  )}
                 </span>
               </div>
               <p className="mt-2 text-sm text-slate-200">{alert.message}</p>
