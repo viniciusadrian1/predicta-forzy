@@ -26,6 +26,7 @@ from app.modules.assets.service import (
     AssetNotFoundError,
     AssetService,
     PlantNotFoundError,
+    rollup_status,
 )
 from app.core.config import get_settings
 from app.modules.assets.smart_pdf import build_plant_pdf
@@ -201,6 +202,14 @@ async def plant_smart_pdf(
     if plant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planta não encontrada")
     plant_assets = await asset_repo.search_assets(plant_id=plant_id)
+    # Mesmo status consolidado das telas: sem isto o conjunto sai "sem dados"
+    # no PDF enquanto a aplicacao o mostra operacional.
+    points_by_parent: dict[str, list[Asset]] = {}
+    for candidate in plant_assets:
+        if candidate.parent_tag:
+            points_by_parent.setdefault(candidate.parent_tag, []).append(candidate)
+    for candidate in plant_assets:
+        candidate.status = rollup_status(candidate, points_by_parent.get(candidate.tag, []))
     telemetry_repo = TelemetryRepository(timeseries)
     latest_by_tag = {asset.tag: await telemetry_repo.latest(asset.tag) for asset in plant_assets}
     pdf_bytes = build_plant_pdf(
