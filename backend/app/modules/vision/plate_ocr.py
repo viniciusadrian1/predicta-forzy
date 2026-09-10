@@ -11,14 +11,16 @@ genericos de placa (fabricante, modelo, numero de serie, data).
 
 from __future__ import annotations
 
+import difflib
 import io
+import itertools
 import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
-from PIL import Image, ImageChops, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
 logger = logging.getLogger("forzy.vision.ocr")
 
@@ -53,16 +55,77 @@ _RAIO_LOCAL = 25
 _MARGEM_TINTA = 10
 # Abaixo disto a leitura e considerada fraca e vale uma segunda tentativa.
 _COBERTURA_ACEITAVEL = 0.6
+# Foto de placa tirada na mao sai sempre alguns graus torta, e o Tesseract
+# aguenta mal: a MESMA placa a 6 graus troca "1755" por "4755" e come um digito
+# da corrente. Buscar ate 8 graus cobre a mao tremida; alem disso a foto foi
+# tirada de lado e o problema e outro.
+_LIMITE_INCLINACAO = 8.0
+_PASSO_INCLINACAO = 0.5
+# Endireitar so compensa se a medida melhorar de verdade. A margem tambem paga
+# o borrao da reamostragem: `rotate(0)` devolve copia sem filtro, entao o angulo
+# zero larga em vantagem e um ganho pequeno nao prova nada.
+_GANHO_MINIMO = 1.08
+
+
+def _variacao_entre_linhas(imagem: Image.Image) -> float:
+    """Quao marcada e a alternancia entre linha de texto e entrelinha.
+
+    Com o texto alinhado as linhas alternam entre escuro (a letra) e claro (a
+    entrelinha), e a mudanca de uma linha para a seguinte e brusca; torto, tudo
+    borra na mesma media e a mudanca some.
+
+    Mede a diferenca entre linhas VIZINHAS, nao o desvio padrao do perfil
+    inteiro: metade da placa na sombra e uma rampa suave que infla o desvio
+    padrao sem dizer nada sobre alinhamento - com aquele criterio esta busca
+    escolhia um angulo absurdo e destruia justamente a foto de luz desigual.
+
+    `resize((1, altura))` e a media de cada linha calculada em C - sem numpy,
+    que nem e dependencia declarada deste backend, e sem laco em Python.
+    """
+    perfil = imagem.resize((1, imagem.height), Image.BOX)
+    vizinha = ImageChops.offset(perfil, 0, 1)
+    return ImageStat.Stat(ImageChops.difference(perfil, vizinha)).mean[0]
+
+
+def _angulo_do_texto(imagem: Image.Image) -> float:
+    """Inclinacao do texto, pelo perfil de projecao horizontal.
+
+    A busca roda numa miniatura: o angulo nao muda com a escala, e assim as 33
+    rotacoes de teste custam poucos milissegundos.
+    """
+    largura = 320
+    if imagem.width < largura:
+        return 0.0
+    miniatura = imagem.resize((largura, max(1, round(largura * imagem.height / imagem.width))))
+    referencia = _variacao_entre_linhas(miniatura)
+    melhor_angulo, melhor_variacao = 0.0, referencia
+    passos = int(_LIMITE_INCLINACAO / _PASSO_INCLINACAO)
+    for i in range(-passos, passos + 1):
+        angulo = i * _PASSO_INCLINACAO
+        if angulo == 0.0:
+            continue
+        girada = miniatura.rotate(angulo, resample=Image.BILINEAR, fillcolor=255)
+        variacao = _variacao_entre_linhas(girada)
+        if variacao > melhor_variacao:
+            melhor_variacao, melhor_angulo = variacao, angulo
+    return melhor_angulo if melhor_variacao > referencia * _GANHO_MINIMO else 0.0
+
+
 def preprocess_image(raw: bytes) -> Image.Image:
     """Normaliza a imagem da placa para melhorar a leitura por OCR.
 
     Aplica correcao de orientacao, escala de cinza, realce de contraste,
-    nitidez e upscale de textos pequenos.
+    ENDIREITAMENTO do texto, nitidez e upscale de textos pequenos.
     """
     image = Image.open(io.BytesIO(raw))
     image = ImageOps.exif_transpose(image)
     image = image.convert("L")
     image = ImageOps.autocontrast(image)
+    angulo = _angulo_do_texto(image)
+    if angulo:
+        # Fundo branco na borda nova: depois do autocontraste o papel da placa
+        # ja e o tom claro, entao o remendo nao vira uma faixa de "tinta".
+        image = image.rotate(angulo, resample=Image.BICUBIC, expand=True, fillcolor=255)
     image = image.filter(ImageFilter.SHARPEN)
     longest = max(image.size)
     if longest < 1600:
@@ -135,7 +198,9 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
         # O "I" de IP sai como 1 ou l no OCR de placa gravada ("1p55"). A faixa
         # 2x-6x cobre os graus reais (IP21..IP68) e evita casar com um ano solto
         # como "1955". O valor e normalizado para "IP##" em _NORMALIZADORES.
-        re.compile(r"\b[I1l][Pp]\s?([2-6]\d)\b"),
+        re.compile(
+            r"(?<![A-Za-z0-9])[I1l][Pp]\s?([0-9OSDBZGIl]{2})(?![A-Za-z0-9])"
+        ),
     ),
     (
         "insulation_class",
@@ -147,7 +212,7 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
         "Fator de serviço",
         re.compile(
             r"(?:F\.?\s?S\.?|FATOR\s*DE\s*SERVI\w*|SERVICE\s*FACTOR)\s*[:.]?\s*"
-            r"([01][.,]\d{1,2})",
+            r"([01OlLI][.,]?[\dOlLI]{1,2})",
             re.IGNORECASE,
         ),
     ),
@@ -155,7 +220,7 @@ _PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
         "power_factor",
         "Fator de potência",
         re.compile(
-            r"(?:F\.?\s?P\.?|COS\s*[O0]?|POWER\s*FACTOR)\s*[:.]?\s*(0[.,]\d{1,2})",
+            r"(?:F\.?\s?P\.?|COS\s*[O0]?|POWER\s*FACTOR)\s*[:.]?\s*([0O][.,]?[\dOlLI]{1,2})",
             re.IGNORECASE,
         ),
     ),
@@ -187,15 +252,264 @@ _NORMALIZADORES: dict[str, "Callable[[str], str]"] = {
 }
 
 
+# ------------------- Correcao das confusoes tipicas do OCR -----------------
+# Placa de motor e texto GRAVADO em metal: baixo contraste, sem serifa e com
+# reflexo. O Tesseract erra sempre nos mesmos pontos - e quase sempre na
+# UNIDADE, nao no numero. Corrigir a unidade aqui, uma vez, deixa as regexes
+# de campo simples em vez de cada uma ter que prever todo tipo de lixo.
+_CORRECOES: tuple[tuple[re.Pattern[str], str], ...] = (
+    # "7,5 kW" sai como "7,5 K\N", "KVV", "KN", "KM", "RW".
+    (re.compile(r"(\d)\s*[KkRr]\s*(?:\\N|VV|N|M|W|VJ)(?![A-Za-z])"), r"\1 kW"),
+    # O "I" de IP e o caractere mais instavel da placa: vira \ ( [ | / 1 l.
+    (re.compile(r"(?<![A-Za-z0-9])[I1l|\\(\[/]\s?[Pp](?=\s?[0-9OSDBZGIl]{2})"), "IP"),
+    # "220 V" sai como "220 NV", "220 \/", "220 |V".
+    (re.compile(r"(\d)\s*(?:NV|\\/|\\V|\|V)(?![A-Za-z])"), r"\1 V"),
+    # "60 Hz" sai como "60 H2", "60 HZ", "60 H z".
+    (re.compile(r"(\d)\s*H\s*[z2Z](?![A-Za-z])"), r"\1 Hz"),
+)
+
+# Letra que o OCR troca por digito dentro de um codigo numerico (IP55 -> IPSS).
+# Fica de fora o que e ambiguo demais para adivinhar (D pode ser 0 ou 5): campo
+# ausente e melhor que campo errado.
+_LETRA_PARA_DIGITO = str.maketrans(
+    {
+        "O": "0",
+        "Q": "0",
+        "I": "1",
+        "l": "1",
+        "L": "1",
+        "Z": "2",
+        "S": "5",
+        "G": "6",
+        "T": "7",
+        "B": "8",
+    }
+)
+
+
+def _normalizar_ocr(texto: str) -> str:
+    """Aplica as correcoes de unidade ao texto lido, antes do parsing."""
+    for padrao, troca in _CORRECOES:
+        texto = padrao.sub(troca, texto)
+    return texto
+
+
+# --------------------------- Checagem fisica -------------------------------
+# Todo campo numerico passa por aqui antes de virar valor. O parser antigo
+# usava `search`: o PRIMEIRO casamento vencia, plausivel ou nao - e numa foto
+# torta "60 Hz 4755 RPM" gravava 4755 rpm no ativo. Motor de inducao NAO gira
+# a 4755 rpm em nenhuma frequencia de rede.
+
+# Rotacao sincrona = 120 * f / polos, para 50 e 60 Hz e 2..12 polos.
+_ROTACOES_SINCRONAS = tuple(
+    sorted({round(120 * f / polos) for f in (50, 60) for polos in range(2, 14, 2)})
+)
+
+
+def _numeros(valor: str) -> list[float]:
+    """Os componentes numericos de um valor tipo "220/380"."""
+    return [float(n.replace(",", ".")) for n in re.findall(r"\d+(?:[.,]\d+)?", valor)]
+
+
+def _rpm_plausivel(valor: str) -> bool:
+    """Rotacao possivel para um motor ligado em rede de 50 ou 60 Hz."""
+    # Motor de inducao gira ABAIXO do sincrono (escorregamento de 0 a 10%). A
+    # folga para cima cobre o motor sincrono, que gira exatamente no ponto.
+    return any(
+        sincrona * 0.90 <= n <= sincrona * 1.005
+        for n in _numeros(valor)
+        for sincrona in _ROTACOES_SINCRONAS
+    )
+
+
+def _faixa(minimo: float, maximo: float) -> "Callable[[str], bool]":
+    """Checagem de faixa que vale para TODOS os componentes de "220/380"."""
+
+    def checar(valor: str) -> bool:
+        numeros = _numeros(valor)
+        return bool(numeros) and all(minimo <= n <= maximo for n in numeros)
+
+    return checar
+
+
+_PLAUSIVEL: dict[str, "Callable[[str], bool]"] = {
+    "nominal_rpm": _rpm_plausivel,
+    # Rede industrial e 50 ou 60 Hz. 400 Hz e aeronautico, nao entra aqui.
+    "frequency_hz": lambda v: _numeros(v) in ([50.0], [60.0]),
+    "power_kw": _faixa(0.01, 10_000),
+    "voltage_v": _faixa(12, 15_000),
+    "nominal_current_a": _faixa(0.05, 10_000),
+    "service_factor": _faixa(1.0, 1.5),
+    "power_factor": _faixa(0.4, 1.0),
+    # IP00 a IP69 sao os graus que a IEC 60529 define.
+    "ip_rating": lambda v: bool(re.fullmatch(r"[0-6][0-9]", v)),
+    "insulation_class": lambda v: v.upper() in {"A", "B", "E", "F", "H", "N", "R"},
+}
+
+# Digitos que o OCR troca entre si nesta fonte. Usado SO para consertar rotacao,
+# onde a checagem fisica e discreta o bastante para o conserto ser verificavel.
+_DIGITOS_CONFUNDIDOS = {
+    "0": "8",
+    "1": "47",
+    "2": "7",
+    "3": "89",
+    "4": "1",
+    "5": "68",
+    "6": "58",
+    "7": "12",
+    "8": "036",
+    "9": "38",
+}
+
+
+def _consertar_rotacao(valor: str) -> str | None:
+    """Troca UM digito e devolve o conserto so se ele for o unico plausivel.
+
+    "4755 RPM" numa foto torta e "1755": 4 e 1 se confundem nesta fonte, e 1755
+    cai na faixa do motor de 4 polos a 60 Hz enquanto 4755 nao cai em nenhuma.
+    Se mais de um conserto der certo nao ha o que decidir - devolve None e o
+    campo fica vazio, que e o desfecho seguro.
+    """
+    candidatos = {
+        valor[:i] + troca + valor[i + 1 :]
+        for i, digito in enumerate(valor)
+        for troca in _DIGITOS_CONFUNDIDOS.get(digito, "")
+    }
+    plausiveis = {c for c in candidatos if _rpm_plausivel(c)}
+    return plausiveis.pop() if len(plausiveis) == 1 else None
+
+
+# Campos onde a virgula decimal cabe. Fora daqui repor virgula seria invencao:
+# "4755 RPM" viraria "475,5 RPM", que ate cai numa faixa sincrona valida.
+_CAMPOS_DECIMAIS = frozenset(
+    {"power_kw", "service_factor", "power_factor", "nominal_current_a"}
+)
+
+
+def _com_virgula_reposta(valor: str) -> set[str]:
+    """Leituras possiveis do valor com a virgula reposta em cada componente.
+
+    So mexe em componente que ficou SEM separador: o OCR come a virgula, nao a
+    muda de lugar. Sem essa restricao "25,4/147" teria duas leituras com a mesma
+    razao entre os componentes ("2,54/1,47" e "25,4/14,7") e nao haveria como
+    decidir.
+    """
+    opcoes: list[list[str]] = []
+    for parte in valor.split("/"):
+        so_digitos = parte.translate(_LETRA_PARA_DIGITO)
+        if any(sep in parte for sep in ",.") or not so_digitos.isdigit():
+            opcoes.append([parte])
+            continue
+        opcoes.append(
+            [so_digitos]
+            + [f"{so_digitos[:i]},{so_digitos[i:]}" for i in range(1, len(so_digitos))]
+        )
+    return {"/".join(combinacao) for combinacao in itertools.product(*opcoes)}
+
+
+def _reparar_numero(valor: str, chave: str, checar: "Callable[[str], bool]") -> str | None:
+    """Conserta o valor quando a faixa do campo torna o conserto UNICO.
+
+    "FS 1,15" sai como "FS 115" e "FS 1,0" sai como "FSLO" - o Tesseract come o
+    separador e le O por 0, L por 1. Fator de servico vive entre 1,0 e 1,5,
+    entao so uma posicao da virgula cabe na faixa, e o conserto e verificavel.
+    Se mais de uma couber, devolve None e o campo fica vazio.
+    """
+    candidatos = {valor.translate(_LETRA_PARA_DIGITO)}
+    if chave in _CAMPOS_DECIMAIS:
+        candidatos |= _com_virgula_reposta(valor)
+    validos = {c for c in candidatos if c != valor and checar(c)}
+    return validos.pop() if len(validos) == 1 else None
+
+
+def _melhor_casamento(
+    padrao: re.Pattern[str], texto: str, chave: str
+) -> tuple[str, bool] | None:
+    """Melhor valor para um campo: o mais informativo que passa na checagem.
+
+    Devolve (valor, foi_consertado). Entre varios casamentos prefere o que tem
+    mais componentes - "25,4/14,7 A" descreve as duas ligacoes do motor, e "7 A"
+    e o resto de uma leitura que o reflexo comeu.
+    """
+    checar = _PLAUSIVEL.get(chave)
+    brutos = [m.group(1).strip() for m in padrao.finditer(texto)]
+    if not brutos:
+        return None
+    if chave == "ip_rating":
+        brutos = [b.translate(_LETRA_PARA_DIGITO) for b in brutos]
+    if checar is None:
+        return brutos[0], False
+
+    validos = [b for b in brutos if checar(b)]
+    if validos:
+        return max(validos, key=lambda v: (len(_numeros(v)), len(v))), False
+    for bruto in brutos:
+        reparado = _reparar_numero(bruto, chave, checar)
+        if reparado is not None:
+            return reparado, True
+    if chave == "nominal_rpm":
+        for bruto in brutos:
+            consertado = _consertar_rotacao(bruto)
+            if consertado:
+                return consertado, True
+    return None
+
+
+# Semelhanca minima para aceitar um nome que o OCR machucou. Medido sobre todas
+# as palavras que o banco de placas produziu: "ETALCORTE", "JUTCHI" e "NEMENS"
+# entram, e nenhuma palavra de fora ("INDUSTRIAL", "TRIFASICO", "PREMIUM")
+# alcanca este valor contra nenhum dos nomes da lista.
+_SEMELHANCA_MINIMA = 0.75
+
+
+def _fabricante_conhecido(upper: str) -> tuple[str, bool] | None:
+    """Nome da lista de fabricantes, tolerando a letra que o OCR comeu.
+
+    Devolve (nome, foi_aproximado). "ETALCORTE" e "UTCHI MOTORS" sao placas
+    conhecidas com a primeira letra perdida no corte ou na perspectiva da foto.
+    O nome vira coluna do ativo e o tecnico filtra a frota por ele - vale
+    reconhecer, desde que a tela avise que foi aproximacao.
+
+    Fica com o MELHOR casamento de toda a placa, nao com o primeiro que passa:
+    varrendo em ordem de leitura, uma palavra qualquer do subtitulo poderia
+    ganhar de um nome que aparece mais abaixo e casa muito melhor.
+
+    A comparacao aproximada so vale para nome com 5+ letras: "ABB", "WEG" e
+    "TECO" sao curtos demais, qualquer palavra parecida viraria falso positivo.
+    """
+    for nome in _KNOWN_MANUFACTURERS:
+        if nome in upper:
+            return nome, False
+
+    longos = [nome for nome in _KNOWN_MANUFACTURERS if len(nome) >= 5]
+    melhor_nome, melhor_semelhanca = None, 0.0
+    for palavra in re.findall(r"[A-Z]{4,}", upper):
+        for nome in longos:
+            semelhanca = difflib.SequenceMatcher(None, palavra, nome).ratio()
+            if semelhanca > melhor_semelhanca:
+                melhor_nome, melhor_semelhanca = nome, semelhanca
+    if melhor_nome and melhor_semelhanca >= _SEMELHANCA_MINIMA:
+        return melhor_nome, True
+    return None
+
+
 def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[ParsedField]:
     """Extrai os campos tipicos de uma placa de motor a partir do texto OCR."""
     fields: list[ParsedField] = []
+    text = _normalizar_ocr(text)
     upper = text.upper()
 
-    for name in _KNOWN_MANUFACTURERS:
-        if name in upper:
-            fields.append(ParsedField("manufacturer", "Fabricante", name.title(), base_confidence))
-            break
+    reconhecido = _fabricante_conhecido(upper)
+    if reconhecido:
+        fabricante, aproximado = reconhecido
+        fields.append(
+            ParsedField(
+                "manufacturer",
+                "Fabricante",
+                fabricante.title(),
+                round(base_confidence - 0.3, 2) if aproximado else base_confidence,
+            )
+        )
 
     model = _MODEL.search(text)
     if model:
@@ -204,13 +518,21 @@ def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[Parsed
         )
 
     for key, label, pattern in _PATTERNS:
-        match = pattern.search(text)
-        if match:
-            valor = match.group(1).strip()
-            normalizar = _NORMALIZADORES.get(key)
-            fields.append(
-                ParsedField(key, label, normalizar(valor) if normalizar else valor, base_confidence)
+        melhor = _melhor_casamento(pattern, text, key)
+        if melhor is None:
+            continue
+        valor, consertado = melhor
+        normalizar = _NORMALIZADORES.get(key)
+        fields.append(
+            ParsedField(
+                key,
+                label,
+                normalizar(valor) if normalizar else valor,
+                # Valor consertado vale menos: a tela pinta em ambar e pede
+                # conferencia na placa.
+                round(base_confidence - 0.25, 2) if consertado else base_confidence,
             )
+        )
 
     # Potencia em CV/HP convertida para kW quando kW nao foi encontrado.
     if not any(f.field == "power_kw" for f in fields):
@@ -226,6 +548,105 @@ def parse_nameplate_text(text: str, base_confidence: float = 0.9) -> list[Parsed
                 )
             )
     return fields
+
+
+# ------------------- Coerencia eletrica da propria placa -------------------
+# Potencia, tensao e corrente de um motor trifasico se amarram por
+# P = raiz(3) . V . I . cos(phi) . rendimento. E o unico juiz disponivel quando
+# o valor lido, sozinho, parece perfeitamente plausivel: "75 kW" no lugar de
+# "7,5 kW" passa em qualquer checagem de faixa, e vira limiar de vibracao
+# errado e ordem de servico errada la na frente.
+#
+# O produto cos(phi) x rendimento fica perto de 0,75 em motor industrial. A
+# banda e larga de proposito: cobre a variacao real e ainda o motor monofasico
+# e o de corrente continua, que nao levam o raiz(3) - e mesmo assim denuncia
+# folgadamente um erro de uma casa decimal, que e o defeito que se quer pegar.
+_FATOR_TIPICO = 0.75
+_BANDA_COERENTE = (0.45, 2.2)
+# Tolerancia da razao entre as duas correntes de uma placa de dupla tensao.
+_TOLERANCIA_RAZAO = 0.15
+
+
+def _potencia_esperada(tensao: str, corrente: str) -> float | None:
+    """Potencia que a tensao e a corrente da placa implicam, em kW."""
+    tensoes, correntes = _numeros(tensao), _numeros(corrente)
+    if not tensoes or not correntes:
+        return None
+    # Placa de dupla tensao lista a corrente na mesma ordem: a maior corrente e
+    # a da menor tensao. O produto V.I e o mesmo nas duas ligacoes, entao casar
+    # a maior tensao com a menor corrente vale para os dois casos.
+    return 1.732 * max(tensoes) * min(correntes) * _FATOR_TIPICO / 1000
+
+
+def _unico(candidatos: set[str], aceitar: "Callable[[str], bool]") -> str | None:
+    """O unico candidato aceito, ou None quando ha zero ou mais de um."""
+    aceitos = {c for c in candidatos if aceitar(c)}
+    return aceitos.pop() if len(aceitos) == 1 else None
+
+
+def conferir_coerencia_eletrica(fields: list[ParsedField]) -> list[ParsedField]:
+    """Corrige ou descarta potencia e corrente que nao fecham com a placa."""
+    por_chave = {f.field: f for f in fields}
+    tensao = por_chave.get("voltage_v")
+    if not (tensao and tensao.value):
+        return fields
+    tensoes = _numeros(tensao.value)
+    saida = list(fields)
+
+    def trocar(chave: str, valor: str | None) -> None:
+        """Substitui o valor do campo, ou tira o campo quando valor e None."""
+        nonlocal saida
+        campo = por_chave[chave]
+        if valor is None:
+            saida = [f for f in saida if f.field != chave]
+            por_chave.pop(chave, None)
+            logger.info("campo %s descartado por incoerencia eletrica", chave)
+            return
+        novo = ParsedField(campo.field, campo.label, valor, round(campo.confidence - 0.25, 2))
+        saida = [novo if f.field == chave else f for f in saida]
+        por_chave[chave] = novo
+
+    # 1) Dupla tensao: a razao entre as duas correntes e a razao inversa entre
+    #    as duas tensoes. Checagem exata da placa contra ela mesma.
+    corrente = por_chave.get("nominal_current_a")
+    if corrente and corrente.value and len(tensoes) == 2:
+        correntes = _numeros(corrente.value)
+        if len(correntes) == 2:
+            alvo = max(tensoes) / min(tensoes)
+
+            def casa_a_razao(valor: str) -> bool:
+                numeros = _numeros(valor)
+                if len(numeros) != 2 or min(numeros) <= 0:
+                    return False
+                return abs(max(numeros) / min(numeros) - alvo) <= alvo * _TOLERANCIA_RAZAO
+
+            if not casa_a_razao(corrente.value):
+                trocar(
+                    "nominal_current_a",
+                    _unico(_com_virgula_reposta(corrente.value), casa_a_razao),
+                )
+
+    # 2) P = raiz(3) . V . I . cos(phi) . rendimento
+    potencia = por_chave.get("power_kw")
+    corrente = por_chave.get("nominal_current_a")
+    if not (potencia and potencia.value and corrente and corrente.value):
+        return saida
+    esperada = _potencia_esperada(tensao.value, corrente.value)
+    if not esperada:
+        return saida
+
+    def coerente(valor: str) -> bool:
+        numeros = _numeros(valor)
+        if not numeros:
+            return False
+        razao = numeros[0] / esperada
+        return _BANDA_COERENTE[0] <= razao <= _BANDA_COERENTE[1]
+
+    if not coerente(potencia.value):
+        # Tensao e corrente ja passaram por faixa e pela razao da dupla tensao;
+        # a potencia nao tem juiz proprio, entao e ela que cede.
+        trocar("power_kw", _unico(_com_virgula_reposta(potencia.value), coerente))
+    return saida
 
 
 def _coverage(fields: list[ParsedField]) -> float:
@@ -272,6 +693,15 @@ _GENERIC_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
             re.IGNORECASE,
         ),
     ),
+)
+
+# "MOTOR ELETRICO INDUSTRIAL" e o subtitulo da placa, nao o fabricante - mas
+# casa com a dica de empresa por causa do "MOTOR". Sem esta excecao, a linha de
+# descricao virava o nome do fabricante do ativo.
+_LINHA_DESCRITIVA = re.compile(
+    r"\bMOTOR(?:ES)?\b.*\b(?:EL[EÉ]TRICO|TRIF[ÁA]SICO|MONOF[ÁA]SICO|INDU[CÇ][ÃA]O|"
+    r"INDUSTRIAL|ASS[IÍ]NCRONO|S[ÍI]NCRONO)\b",
+    re.IGNORECASE,
 )
 
 # Sufixos que denunciam um nome de empresa numa linha nao rotulada.
@@ -339,7 +769,9 @@ def parse_generic_fields(text: str, base_confidence: float) -> list[ParsedField]
     # Fabricante nao rotulado: 1a linha com cara de nome de empresa.
     if "manufacturer" not in seen:
         for line in (ln.strip() for ln in text.splitlines()):
-            if 3 <= len(line) <= 48 and _COMPANY_HINT.search(line):
+            if not (3 <= len(line) <= 48) or _LINHA_DESCRITIVA.search(line):
+                continue
+            if _COMPANY_HINT.search(line):
                 fields.append(
                     ParsedField("manufacturer", "Fabricante", line, round(base_confidence - 0.2, 2))
                 )
@@ -471,9 +903,11 @@ def extract_nameplate(raw: bytes) -> ExtractionResult:
     def _tentar(imagem: Image.Image) -> ExtractionResult:
         text, mean_conf = engine.read_text(imagem)
         base = round(max(mean_conf, 0.3), 2)
-        fields = merge_fields(
-            parse_nameplate_text(text, base_confidence=base),
-            parse_generic_fields(text, base_confidence=base),
+        fields = conferir_coerencia_eletrica(
+            merge_fields(
+                parse_nameplate_text(text, base_confidence=base),
+                parse_generic_fields(text, base_confidence=base),
+            )
         )
         return ExtractionResult(
             engine=engine_name, raw_text=text, fields=fields, coverage=_coverage(fields)

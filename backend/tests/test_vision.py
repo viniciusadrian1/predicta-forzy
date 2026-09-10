@@ -4,11 +4,15 @@ import io
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.modules.vision import plate_ocr
 from app.modules.vision.plate_ocr import (
     EXPECTED_FIELDS,
+    ParsedField,
+    _angulo_do_texto,
+    _normalizar_ocr,
+    conferir_coerencia_eletrica,
     extract_nameplate,
     get_ocr_engine,
     parse_generic_fields,
@@ -239,3 +243,137 @@ def test_ruido_de_ocr_nao_vira_valor_de_campo():
     extraidos = {f.field: f.value for f in parse_generic_fields(bom, 0.9)}
     assert extraidos.get("manufacturer") == "WEG MOTORES"
     assert extraidos.get("model") == "W22 IR3"
+
+# --- Confusoes do OCR e checagem fisica -------------------------------------
+# Cobre o defeito mais caro deste modulo: campo PREENCHIDO com valor errado.
+# Cobertura alta nao prova nada - ela conta campo cheio, nao campo certo, e era
+# exatamente ai que "4755 RPM" e "75 kW" passavam para o cadastro do ativo.
+
+
+def test_normalizacao_conserta_unidade_que_o_ocr_estraga():
+    """As tres confusoes de unidade medidas nas placas do repositorio."""
+    barra = chr(92)
+    assert "IP55" in _normalizar_ocr("1760 RPM " + barra + "P55")
+    assert "IP54" in _normalizar_ocr("4740 RPM (P54")
+    assert "kW" in _normalizar_ocr("7,5 K" + barra + "N")
+    assert "220 V" in _normalizar_ocr("220 NV")
+
+
+def test_rotacao_impossivel_nao_vira_valor():
+    """Motor de inducao nao gira a 4755 rpm em nenhuma frequencia de rede.
+
+    O parser antigo pegava o primeiro casamento da regex e gravava 4755. Hoje a
+    troca de UM digito e aceita so porque 1755 e a unica leitura plausivel - e
+    entra com confianca menor, para a tela pedir conferencia na placa.
+    """
+    campos = {f.field: f for f in parse_nameplate_text("60 Hz 4755 RPM")}
+    assert campos["nominal_rpm"].value == "1755"
+    assert campos["nominal_rpm"].confidence < campos["frequency_hz"].confidence
+
+
+def test_rotacao_ambigua_fica_vazia():
+    """Sem conserto unico, campo vazio - quem revisa preenche o que falta."""
+    campos = {f.field: f.value for f in parse_nameplate_text("999999 RPM")}
+    assert "nominal_rpm" not in campos
+
+
+def test_virgula_decimal_reposta_pela_faixa_do_campo():
+    """"FS 1,15" sai como "FS 115" e "FS 1,0" sai como "FSLO" no JPEG ruim.
+
+    Fator de servico vive entre 1,0 e 1,5: so uma posicao da virgula cabe na
+    faixa, entao o conserto e verificavel em vez de chute.
+    """
+    assert {f.field: f.value for f in parse_nameplate_text("ISOL F FS 115")}[
+        "service_factor"
+    ] == "1,15"
+    assert {f.field: f.value for f in parse_nameplate_text("ISOL B FSLO")}[
+        "service_factor"
+    ] == "1,0"
+    assert {f.field: f.value for f in parse_nameplate_text("60 Hz FPO83")}[
+        "power_factor"
+    ] == "0,83"
+
+
+def _campos(**valores: str) -> list[ParsedField]:
+    return [ParsedField(chave, chave, valor, 0.9) for chave, valor in valores.items()]
+
+
+def test_coerencia_eletrica_recupera_a_virgula_da_potencia():
+    """"7,5 kW" lido como "75 kW" e dez vezes a potencia real.
+
+    Nenhuma checagem de faixa denuncia 75 kW - o que denuncia e a propria placa:
+    P = raiz(3) . V . I . cos(phi) . rendimento nao fecha com 220/380 V e
+    25,4/14,7 A.
+    """
+    conferidos = {
+        f.field: f
+        for f in conferir_coerencia_eletrica(
+            _campos(power_kw="75", voltage_v="220/380", nominal_current_a="25,4/14,7")
+        )
+    }
+    assert conferidos["power_kw"].value == "7,5"
+    assert conferidos["power_kw"].confidence < 0.9
+
+
+def test_coerencia_eletrica_usa_a_razao_da_dupla_tensao():
+    """Numa placa 220/380 V a razao entre as duas correntes e a inversa: 1,73.
+
+    "25,4/147 A" da razao 5,8 e nao pode ser; "25,4/14,7 A" da 1,73 e fecha.
+    """
+    conferidos = {
+        f.field: f.value
+        for f in conferir_coerencia_eletrica(
+            _campos(voltage_v="220/380", nominal_current_a="25,4/147")
+        )
+    }
+    assert conferidos["nominal_current_a"] == "25,4/14,7"
+
+
+def test_coerencia_eletrica_nao_mexe_em_placa_correta():
+    """A checagem tem que ser invisivel quando a leitura ja esta certa."""
+    originais = _campos(power_kw="7,5", voltage_v="220/380", nominal_current_a="25,4/14,7")
+    assert conferir_coerencia_eletrica(originais) == originais
+
+
+def test_coerencia_eletrica_ignora_equipamento_sem_tensao():
+    """Placa que nao e de motor passa intacta, sem tensao para comparar."""
+    originais = _campos(manufacturer="Weg", model="NIAGARA")
+    assert conferir_coerencia_eletrica(originais) == originais
+
+
+def test_fabricante_tolera_letra_comida_mas_marca_confianca_menor():
+    """"ETALCORTE" e a placa de sempre com a primeira letra fora do quadro."""
+    exato = {f.field: f for f in parse_nameplate_text("METALCORTE 3,0 kW")}
+    aproximado = {f.field: f for f in parse_nameplate_text("ETALCORTE 3,0 kW")}
+    assert exato["manufacturer"].value == "Metalcorte"
+    assert aproximado["manufacturer"].value == "Metalcorte"
+    assert aproximado["manufacturer"].confidence < exato["manufacturer"].confidence
+
+
+def test_subtitulo_da_placa_nao_vira_fabricante():
+    """"MOTOR ELETRICO INDUSTRIAL" e descricao do produto, nao nome de empresa.
+
+    Casava com a dica de empresa por causa do "MOTOR" e virava o fabricante do
+    ativo - pior que campo vazio, porque ninguem desconfia do que veio cheio.
+    """
+    campos = {
+        f.field: f.value
+        for f in parse_generic_fields("MOTOR ELETRICO INDUSTRIAL", base_confidence=0.8)
+    }
+    assert "manufacturer" not in campos
+
+
+def test_endireitamento_mede_a_inclinacao_e_deixa_a_placa_reta_em_paz():
+    """A busca de angulo precisa achar a inclinacao E nao girar o que esta reto.
+
+    Sem a segunda metade, toda foto ja alinhada era girada por ruido de medida.
+    """
+    reta = Image.new("L", (800, 400), color=255)
+    desenho = ImageDraw.Draw(reta)
+    for y in range(60, 340, 40):
+        desenho.rectangle([80, y, 720, y + 14], fill=30)
+
+    assert _angulo_do_texto(reta) == 0.0
+    inclinada = reta.rotate(5, resample=Image.BICUBIC, fillcolor=255)
+    assert _angulo_do_texto(inclinada) < 0  # gira de volta, no sentido oposto
+    assert abs(_angulo_do_texto(inclinada) + 5) <= 1.5
