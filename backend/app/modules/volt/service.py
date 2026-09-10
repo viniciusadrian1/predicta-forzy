@@ -12,12 +12,13 @@ log de auditoria; o nivel de detalhe segue o papel do usuario (RBAC).
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import logging
 import re
+from dataclasses import replace
+from html import escape
 
 from app.core.config import Settings
+from app.core.notify import enviar_telegram
 from app.core.rbac import has_required_role, rbac_enforced
 from app.infra.db.base import timeseries_session_factory
 from app.modules.assets.repository import AssetRepository
@@ -76,6 +77,27 @@ GREETING = (
 )
 
 
+def _texto_do_handoff(resumo: HandoffSummary) -> str:
+    """Mensagem de plantao a partir do resumo que o Volt ja monta.
+
+    Escapa o texto que veio do tecnico: o sintoma e digitado por ele e o
+    Telegram interpreta HTML - um "<" solto quebraria a mensagem inteira.
+    """
+    linhas = ["<b>Volt encaminhou um atendimento</b>", f"Motivo: {escape(resumo.reason)}"]
+    if resumo.asset_tag:
+        ativo = resumo.asset_tag
+        if resumo.asset_name:
+            ativo = f"{ativo} - {resumo.asset_name}"
+        linhas.append(f"Ativo: {escape(ativo)}")
+    if resumo.symptom:
+        linhas.append(f"Sintoma: {escape(resumo.symptom)}")
+    if resumo.diagnosis:
+        confianca = f" ({resumo.confidence:.0%})" if resumo.confidence is not None else ""
+        linhas.append(f"Diagnostico: {escape(resumo.diagnosis)}{confianca}")
+    linhas.append(f"Acoes ate agora: {escape(resumo.actions_taken)}")
+    return "\n".join(linhas)
+
+
 def greeting_reply() -> VoltReply:
     """Mensagem inicial do Volt (capacidades ditas de cara - transparencia)."""
     return VoltReply(message=GREETING, state=VoltStateModel(step="aguardando_ativo"))
@@ -125,6 +147,26 @@ class VoltService:
 
     # ------------------------------------------------------------------
     async def advance(self, request: VoltRequest) -> VoltReply:
+        """Processa um turno e avisa o plantao quando o atendimento escala.
+
+        Envolve o fluxo em vez de chamar o aviso dentro dele. ``_advance`` tem
+        QUATRO saidas diferentes - e a primeira entrega o turno inteiro ao
+        agente e retorna antes de todo o resto -, entao pendurar o aviso em uma
+        delas deixaria escapatoria silenciosa. Escalada que nao avisa ninguem e
+        pior que nao ter aviso nenhum: a tela promete que alguem foi chamado.
+
+        Envolvendo por fora, os seis gatilhos de handoff de hoje entram de
+        graca, e o que alguem acrescentar amanha tambem.
+        """
+        reply = await self._advance(request)
+        if reply.handoff is not None:
+            # ponytail: espera o Telegram responder (tipicamente ~300 ms). Se
+            # virar gargalo no chat, trocar por create_task guardando a
+            # referencia da task.
+            await enviar_telegram(_texto_do_handoff(reply.handoff))
+        return reply
+
+    async def _advance(self, request: VoltRequest) -> VoltReply:
         """Processa a mensagem do usuario e devolve o proximo turno."""
         message = request.message.strip()
         state = request.state.model_copy(deep=True)

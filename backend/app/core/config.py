@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     # padrao e mais folgado por causa da cadencia de poll (30s) + dedup de idle.
     circuit_breaker_gap_seconds: float = 120.0
 
+    # --- Escalada humana: aviso no grupo de plantao (bot do Telegram) ---
+    # Vazio = o handoff so aparece na conversa, como era antes. Um bot so
+    # consegue escrever para quem ja falou com ele: em grupo, adicione o bot e
+    # use o chat_id do GRUPO, que vem negativo.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     # --- Volt (chatbot de manutencao) ---
     # Limiar de confianca: abaixo dele, o diagnostico e escalado a um humano.
     volt_confidence_threshold: float = 0.5
