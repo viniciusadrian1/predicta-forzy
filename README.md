@@ -2,7 +2,19 @@
 
 Plataforma de **Digital Twin** para monitoramento em tempo real e manutenção
 preditiva de motores elétricos industriais (220 V trifásicos). Desenvolvida para o
-**Challenge FIAP × Forzy (Promon)**.
+**Challenge FIAP × Forzy (Promon)** pelo grupo **Predicta**.
+
+**Demonstração no ar:** <http://128.140.71.89/> — acesso `admin` / `admin123`.
+
+## Equipe
+
+| Integrante | RM |
+|---|---|
+| Augusto Oliveira Codo de Sousa | RM502080 |
+| Felipe de Oliveira Cabral | RM561720 |
+| Gabriel Tonelli Avelino Dos Santos | RM564705 |
+| Sofia Bueris Netto de Souza | RM565818 |
+| Vinícius Adrian Siqueira de Oliveira | RM564962 |
 
 ---
 
@@ -28,8 +40,8 @@ da planta baixa do ativo:
 | Aquisição de dados | Servidor/simulador OPC-UA → cliente assíncrono → TimescaleDB |
 | Visualização | Next.js 14 — planta interativa, dashboards em tempo real |
 | Cadastro de ativos | CRUD + OCR da placa de identificação |
-| Detecção de anomalias | ML (Isolation Forest, LSTM autoencoder) |
-| Manutenção preditiva | Estimativa de RUL |
+| Detecção de anomalias | ML (Isolation Forest + autoencoder MLP sobre janelas de vibração) |
+| Manutenção preditiva | RUL por tendência de vibração até o limite do motor, com teto na inspeção do fabricante |
 | Troubleshooting | Chat com LLM + RAG sobre manuais técnicos |
 | Governança | RBAC, auditoria, classificação de dados |
 
@@ -68,7 +80,7 @@ Pré-requisitos: **Docker** + **Docker Compose v2**.
 
 ```bash
 # 1. Entrar no diretorio do projeto
-cd predicta
+cd predicta-forzy
 
 # 2. Criar o arquivo de ambiente
 cp .env.example .env
@@ -83,7 +95,12 @@ docker compose ps
 docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.scripts.seed
 
-# 6. Acessar:
+# 6. Importar o historico real da bancada (MTR-F01 / MTR-F02).
+#    Sem este passo os dois mancais sobem cadastrados e sem leitura nenhuma.
+#    E idempotente: rodar de novo nao duplica dado.
+docker compose exec backend python -m app.scripts.import_history data/history_forzy_iolink.csv
+
+# 7. Acessar:
 #    Frontend ......... http://localhost:3001
 #    API (Swagger) .... http://localhost:8000/docs
 #    OPC-UA ........... opc.tcp://localhost:4840/forzy/server/
@@ -91,7 +108,9 @@ docker compose exec backend python -m app.scripts.seed
 
 Faça login com `admin` / `admin123`. Após ~1 minuto, a tela
 `http://localhost:3001/asset/MTR-001` exibe o gráfico de temperatura em tempo
-real; o assistente de troubleshooting fica disponível em `/chat`.
+real. O conjunto motor-bomba da Forzy fica em `/asset/MTR-F00`, com os dois
+mancais lado a lado. O assistente de manutenção (Volt) fica em `/volt` e também
+como widget flutuante em qualquer tela.
 
 ## Estrutura
 
@@ -117,7 +136,7 @@ assets/     Plantas, modelos 3D e amostras de placas
 ## Stack
 
 Next.js 14 · FastAPI · PostgreSQL 16 · TimescaleDB · ChromaDB · `asyncua` ·
-scikit-learn · API Anthropic · Docker Compose · Kubernetes.
+scikit-learn · LLM configurável (OpenAI ou Anthropic) · Docker Compose · Kubernetes.
 
 ## Documentação
 
