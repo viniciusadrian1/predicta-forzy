@@ -87,6 +87,28 @@ async def test_rede_fora_nao_levanta(telegram_configurado, monkeypatch):
     assert await enviar_telegram("oi") is False
 
 
+async def test_token_nunca_vai_para_o_log(telegram_configurado, monkeypatch, caplog):
+    """O token viaja no CAMINHO da URL, então vaza por quem registrar a URL.
+
+    Foi assim que ele apareceu inteiro no log do container: o httpx registra a
+    URL completa em nível INFO. Quem tem o token controla o bot, então nem a
+    mensagem de uma exceção de rede pode carregá-lo.
+    """
+    def explodir(*_args, **_kwargs):
+        # Uma excecao que traz a URL inteira, como algumas de proxy/DNS fazem.
+        raise httpx.ConnectError(
+            "falha ao conectar em https://api.telegram.org/bot123456:FAKE-TOKEN/sendMessage"
+        )
+
+    monkeypatch.setattr(notify.httpx, "AsyncClient", explodir)
+    with caplog.at_level("WARNING", logger="forzy.notify"):
+        assert await enviar_telegram("oi") is False
+
+    registrado = "\n".join(r.getMessage() for r in caplog.records)
+    assert "FAKE-TOKEN" not in registrado
+    assert "<token oculto>" in registrado
+
+
 # --------------------- Enganche no handoff do Volt ---------------------
 
 
@@ -148,5 +170,10 @@ def test_texto_do_handoff_escapa_o_que_o_tecnico_digitou():
     )
     assert "&lt;estranho&gt;" in texto
     assert "<estranho>" not in texto
-    assert "MTR-001 - Motor da bancada" in texto
-    assert "(42%)" in texto
+    assert "MTR-001 · Motor da bancada" in texto
+    assert "42% de confiança" in texto
+    # Texto de produto vai acentuado: quem le e o tecnico, nao o log.
+    assert "Diagnóstico:" in texto
+    assert "Ações até agora:" in texto
+    # O ativo antes do motivo: no celular, QUAL maquina vem primeiro.
+    assert texto.index("Ativo:") < texto.index("Motivo da escalada:")

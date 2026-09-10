@@ -60,3 +60,8 @@ def configure_logging(level: str = "INFO") -> None:
     # Reduz o ruido de bibliotecas verbosas.
     logging.getLogger("asyncua").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # O httpx registra a URL COMPLETA de cada chamada em nivel INFO. A API do
+    # Telegram leva o token do bot no caminho da URL, entao cada aviso de
+    # plantao imprimia o token inteiro no log do container - de onde ele vai
+    # para qualquer coletor de log. Quem tem o token controla o bot.
+    logging.getLogger("httpx").setLevel(logging.WARNING)

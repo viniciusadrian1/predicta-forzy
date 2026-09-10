@@ -80,21 +80,32 @@ GREETING = (
 def _texto_do_handoff(resumo: HandoffSummary) -> str:
     """Mensagem de plantao a partir do resumo que o Volt ja monta.
 
+    O texto e ACENTUADO: comentario e docstring deste projeto ficam em ASCII,
+    mas isto e mensagem de produto, e quem le e o tecnico no grupo de plantao.
+
+    O ativo vem primeiro de proposito - quem le no celular precisa saber QUAL
+    maquina antes de saber por que a conversa escalou.
+
     Escapa o texto que veio do tecnico: o sintoma e digitado por ele e o
     Telegram interpreta HTML - um "<" solto quebraria a mensagem inteira.
     """
-    linhas = ["<b>Volt encaminhou um atendimento</b>", f"Motivo: {escape(resumo.reason)}"]
+    linhas = ["<b>Volt encaminhou um atendimento</b>", ""]
     if resumo.asset_tag:
         ativo = resumo.asset_tag
         if resumo.asset_name:
-            ativo = f"{ativo} - {resumo.asset_name}"
-        linhas.append(f"Ativo: {escape(ativo)}")
+            ativo = f"{ativo} · {resumo.asset_name}"
+        linhas.append(f"<b>Ativo:</b> {escape(ativo)}")
     if resumo.symptom:
-        linhas.append(f"Sintoma: {escape(resumo.symptom)}")
+        linhas.append(f"<b>Sintoma:</b> {escape(resumo.symptom)}")
     if resumo.diagnosis:
-        confianca = f" ({resumo.confidence:.0%})" if resumo.confidence is not None else ""
-        linhas.append(f"Diagnostico: {escape(resumo.diagnosis)}{confianca}")
-    linhas.append(f"Acoes ate agora: {escape(resumo.actions_taken)}")
+        confianca = (
+            f" ({resumo.confidence:.0%} de confiança)"
+            if resumo.confidence is not None
+            else ""
+        )
+        linhas.append(f"<b>Diagnóstico:</b> {escape(resumo.diagnosis)}{confianca}")
+    linhas.append(f"<b>Motivo da escalada:</b> {escape(resumo.reason)}")
+    linhas.append(f"<b>Ações até agora:</b> {escape(resumo.actions_taken)}")
     return "\n".join(linhas)
 
 

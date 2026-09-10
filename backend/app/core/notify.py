@@ -23,6 +23,18 @@ _TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
 _TIMEOUT_S = 4.0
 
 
+def _sem_token(texto: str) -> str:
+    """Remove o token de qualquer texto que va para o log.
+
+    O token viaja no CAMINHO da URL da API do Telegram, entao ele escapa por
+    qualquer coisa que registre a URL. A porta principal era o log de nivel
+    INFO do httpx (fechada em core/logging.py); esta e a segunda barreira, para
+    o caso de uma excecao de rede trazer a URL na propria mensagem.
+    """
+    token = get_settings().telegram_bot_token
+    return texto.replace(token, "<token oculto>") if token else texto
+
+
 async def enviar_telegram(texto: str) -> bool:
     """Manda uma mensagem ao grupo de plantao; devolve se ela saiu.
 
@@ -45,7 +57,7 @@ async def enviar_telegram(texto: str) -> bool:
                 json={"chat_id": chat_id, "text": texto, "parse_mode": "HTML"},
             )
     except Exception as exc:  # noqa: BLE001 - rede fora nao derruba o atendimento
-        logger.warning("Falha ao avisar no Telegram: %s", exc)
+        logger.warning("Falha ao avisar no Telegram: %s", _sem_token(str(exc)))
         return False
 
     if resposta.status_code != 200:
@@ -54,7 +66,7 @@ async def enviar_telegram(texto: str) -> bool:
         logger.warning(
             "Telegram recusou o aviso (%s): %s",
             resposta.status_code,
-            resposta.text[:200],
+            _sem_token(resposta.text[:200]),
         )
         return False
     return True
