@@ -171,7 +171,7 @@ class VoltService:
         """
         reply = await self._advance(request)
         if reply.handoff is not None:
-            # ponytail: espera o Telegram responder (tipicamente ~300 ms). Se
+            # Espera o Telegram responder (tipicamente ~300 ms). Se
             # virar gargalo no chat, trocar por create_task guardando a
             # referencia da task.
             await enviar_telegram(_texto_do_handoff(reply.handoff))

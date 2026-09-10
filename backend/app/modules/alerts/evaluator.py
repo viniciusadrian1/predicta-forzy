@@ -46,7 +46,7 @@ REINCIDENCIA_MINUTOS = 5
 # AlertRepository.has_open / close_resolved). Nao ha janela de deduplicacao por
 # tempo: enquanto a condicao valer, e o mesmo episodio - o que da, de brinde, a
 # DURACAO do episodio (created_at -> ack_at).
-# ponytail: aceleracao minima esperada quando ha vibracao relevante - abaixo
+# Aceleracao minima esperada quando ha vibracao relevante - abaixo
 # disso com velocidade alta indica divergencia (falha de sensor). Calibrar.
 ACCEL_DIVERGENCE_MIN = 0.02
 

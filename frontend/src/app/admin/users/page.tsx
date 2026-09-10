@@ -1,7 +1,7 @@
 "use client";
 
 // Usuários: contas cadastradas e seus papéis (RBAC). Consome GET /users (admin).
-// ponytail: somente leitura — criar/editar exige endpoints novos no backend.
+// Somente leitura — criar/editar exige endpoints novos no backend.
 
 import { useQuery } from "@tanstack/react-query";
 import { ServerCrash, Users } from "lucide-react";

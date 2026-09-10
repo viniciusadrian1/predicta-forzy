@@ -137,7 +137,7 @@ class Settings(BaseSettings):
     # Limiar de confianca: abaixo dele, o diagnostico e escalado a um humano.
     volt_confidence_threshold: float = 0.5
     # Ativos criticos para a producao: sempre exigem revisao humana, mesmo
-    # com alta confianca. ponytail: virar campo do ativo quando houver UI.
+    # com alta confianca. Virar campo do ativo quando houver UI.
     volt_critical_asset_tags: str = "MTR-001"
 
     # --- Feature flags (modularidade) ---

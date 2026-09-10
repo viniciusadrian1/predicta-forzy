@@ -6,6 +6,7 @@
 - Recentra na origem, converte mm -> metros
 - Colore cada solido conforme a peca (motor azul, mancais escuros, etc.)
 """
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +20,11 @@ from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS
 
-SRC = Path(r"C:\Users\vinic\Downloads\ChallengeForzy-bomba-teste (2).stp")
-OUT = Path(r"C:\Users\vinic\Downloads\PredictaCC\frontend\public\models\bomba-teste.glb")
+# Caminhos relativos a raiz do repositorio, sobrescritiveis pela linha de
+# comando:  python tools/cad/step_to_glb.py <entrada.stp> <saida.glb>
+RAIZ = Path(__file__).resolve().parents[2]
+SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else RAIZ / "assets" / "3d_models" / "ChallengeForzy-bomba-teste.stp"
+OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else RAIZ / "frontend" / "public" / "models" / "bomba-teste.glb"
 
 # --- 1) leitura -----------------------------------------------------------
 reader = STEPControl_Reader()
